@@ -8,5 +8,8 @@ configure:
 build:
     cmake --build build --parallel --target blockchainmodulelib
 
+nix:
+     nix build path:./#debug -L
+
 clean:
     cmake --build build --target clean
