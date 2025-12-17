@@ -1,0 +1,12 @@
+.idea/
+.qt/
+
+# CMake generated files
+Makefile
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+cmake-build-debug
+
+# Build directories
+build/
