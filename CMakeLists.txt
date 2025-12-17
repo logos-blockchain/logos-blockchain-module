@@ -104,13 +104,43 @@ ExternalProject_Add(logos_ep
 # Artifacts are expected in <repo>/target/release and headers at <repo>/nomos-c/ (crate root).
 ExternalProject_Get_Property(logos_ep SOURCE_DIR)
 
-# Allow easy adjustments from CLion cache: dylib file names and header file name
+# Allow easy adjustments from CLion cache: shared library names and header file name
+# Decide extension and default names per platform. Users can still override via cache.
+if(APPLE)
+  set(NOMOS_EXT ".dylib")
+  set(NOMOS_BIN_DIR "lib")
+elseif(WIN32)
+  set(NOMOS_EXT ".dll")
+  # On Windows, runtime DLLs typically go to bin, import libs to lib
+  set(NOMOS_BIN_DIR "bin")
+else()
+  set(NOMOS_EXT ".so")
+  set(NOMOS_BIN_DIR "lib")
+endif()
+
 # Source (as produced by cargo) and staged (the name we expose to consumers)
-set(NOMOS_C_SOURCE_DYLIB_NAME "liblibnomos.dylib" CACHE STRING "Actual dylib filename produced by cargo in target/release")
-set(NOMOS_C_DYLIB_NAME "libnomos.dylib" CACHE STRING "Staged dylib filename to expose to consumers")
+# Note: The crate appears to produce liblibnomos on Unix per current setup.
+set(NOMOS_C_SOURCE_DYLIB_NAME "liblibnomos${NOMOS_EXT}" CACHE STRING "Actual shared library filename produced by cargo in target/release")
+set(NOMOS_C_DYLIB_NAME "libnomos${NOMOS_EXT}" CACHE STRING "Staged shared library filename to expose to consumers")
 set(NOMOS_C_HEADER_NAME "libnomos.h" CACHE STRING "Header file to stage from nomos-c crate root")
 
-set(NOMOS_STAGED_DYLIB "${LOGOS_INSTALL_DIR}/lib/${NOMOS_C_DYLIB_NAME}")
+# Compute effective names that follow current platform extension, even if cache holds a different one
+# This avoids stale cache issues when switching platforms or build dirs without clearing cache.
+set(_nomos_ext_regex "\\.(dylib|so|dll)$")
+set(NOMOS_C_SOURCE_DYLIB_NAME_EFFECTIVE "${NOMOS_C_SOURCE_DYLIB_NAME}")
+set(NOMOS_C_DYLIB_NAME_EFFECTIVE        "${NOMOS_C_DYLIB_NAME}")
+string(REGEX MATCH ${_nomos_ext_regex} _src_has_ext "${NOMOS_C_SOURCE_DYLIB_NAME}")
+string(REGEX MATCH ${_nomos_ext_regex} _dst_has_ext "${NOMOS_C_DYLIB_NAME}")
+if(_src_has_ext AND NOT NOMOS_C_SOURCE_DYLIB_NAME MATCHES ".*${NOMOS_EXT}$")
+  string(REGEX REPLACE ${_nomos_ext_regex} "${NOMOS_EXT}" NOMOS_C_SOURCE_DYLIB_NAME_EFFECTIVE "${NOMOS_C_SOURCE_DYLIB_NAME}")
+  message(STATUS "Adjusting NOMOS_C_SOURCE_DYLIB_NAME to platform extension: ${NOMOS_C_SOURCE_DYLIB_NAME} -> ${NOMOS_C_SOURCE_DYLIB_NAME_EFFECTIVE}")
+endif()
+if(_dst_has_ext AND NOT NOMOS_C_DYLIB_NAME MATCHES ".*${NOMOS_EXT}$")
+  string(REGEX REPLACE ${_nomos_ext_regex} "${NOMOS_EXT}" NOMOS_C_DYLIB_NAME_EFFECTIVE "${NOMOS_C_DYLIB_NAME}")
+  message(STATUS "Adjusting NOMOS_C_DYLIB_NAME to platform extension: ${NOMOS_C_DYLIB_NAME} -> ${NOMOS_C_DYLIB_NAME_EFFECTIVE}")
+endif()
+
+set(NOMOS_STAGED_DYLIB "${LOGOS_INSTALL_DIR}/lib/${NOMOS_C_DYLIB_NAME_EFFECTIVE}")
 set(NOMOS_STAGED_HEADER "${LOGOS_INSTALL_DIR}/include/${NOMOS_C_HEADER_NAME}")
 
 # Provide actual rules that produce each staged file independently so the
@@ -121,10 +151,11 @@ set(NOMOS_STAGED_HEADER "${LOGOS_INSTALL_DIR}/include/${NOMOS_C_HEADER_NAME}")
 
 add_custom_command(
   OUTPUT "${NOMOS_STAGED_DYLIB}"
-  COMMAND ${CMAKE_COMMAND} -E echo "Ensuring libnomos.dylib exists (building nomos-c if needed)"
+  COMMAND ${CMAKE_COMMAND} -E echo "Ensuring ${NOMOS_C_DYLIB_NAME_EFFECTIVE} exists (building nomos-c if needed)"
   COMMAND ${CMAKE_COMMAND} -E env CARGO_TERM_COLOR=always cargo build --release --package nomos-c
   COMMAND ${CMAKE_COMMAND} -E make_directory "${LOGOS_INSTALL_DIR}/lib"
-  COMMAND ${CMAKE_COMMAND} -E copy "${SOURCE_DIR}/target/release/${NOMOS_C_SOURCE_DYLIB_NAME}" "${LOGOS_INSTALL_DIR}/lib/${NOMOS_C_DYLIB_NAME}"
+  COMMAND ${CMAKE_COMMAND} -E make_directory "${LOGOS_INSTALL_DIR}/bin"
+  COMMAND ${CMAKE_COMMAND} -E copy "${SOURCE_DIR}/target/release/${NOMOS_C_SOURCE_DYLIB_NAME_EFFECTIVE}" "${LOGOS_INSTALL_DIR}/${NOMOS_BIN_DIR}/${NOMOS_C_DYLIB_NAME_EFFECTIVE}"
   DEPENDS logos_ep
   WORKING_DIRECTORY ${SOURCE_DIR}
   VERBATIM
@@ -147,13 +178,21 @@ add_custom_target(logos_cargo_build ALL
 )
 
 # Import the staged dynamic library from the cargo build
-set(LOGOS_IMPORTED_LIB "${LOGOS_INSTALL_DIR}/lib/${NOMOS_C_DYLIB_NAME}")
-add_library(logos SHARED IMPORTED GLOBAL
-        )
+set(LOGOS_IMPORTED_LIB "${LOGOS_INSTALL_DIR}/${NOMOS_BIN_DIR}/${NOMOS_C_DYLIB_NAME_EFFECTIVE}")
+add_library(logos SHARED IMPORTED GLOBAL)
 set_target_properties(logos PROPERTIES
   IMPORTED_LOCATION "${LOGOS_IMPORTED_LIB}"
   INTERFACE_INCLUDE_DIRECTORIES "${LOGOS_INSTALL_DIR}/include"
 )
+
+# On Windows, also set IMPORTED_IMPLIB if present (name assumed nomos.lib)
+if(WIN32)
+  # Users can override via cache if different
+  set(NOMOS_IMPORT_LIB_NAME "nomos.lib" CACHE STRING "Import library name for Windows")
+  set_target_properties(logos PROPERTIES
+    IMPORTED_IMPLIB "${LOGOS_INSTALL_DIR}/lib/${NOMOS_IMPORT_LIB_NAME}"
+  )
+endif()
 add_dependencies(logos logos_cargo_build)
 
 # Link the imported dependency if you plan to use it from this target
