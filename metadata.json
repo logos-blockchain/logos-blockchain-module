@@ -1,0 +1,12 @@
+{
+  "name": "logos-blockchain-module",
+  "version": "1.0.0",
+  "description": "Logos blockchain node for logos-core",
+  "author": "Logos Blockchain Team",
+  "type": "blockchain",
+  "category": "blockchain",
+  "main": "LogosBlockchainModule",
+  "dependencies": [],
+  "capabilities": [],
+  "include": ["libnomos.dylib"]
+}
