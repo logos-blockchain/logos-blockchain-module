@@ -3,7 +3,7 @@ default:
 
 # Configure the build directory (run this once, or whenever CMake config changes)
 configure:
-    cmake -S . -B build -G "Unix Makefiles"
+    cmake -S . -B build
 
 build:
     cmake --build build --parallel --target blockchainmodulelib
@@ -13,3 +13,4 @@ nix:
 
 clean:
     cmake --build build --target clean
+    rm libblockchainmodulelib.so || true
