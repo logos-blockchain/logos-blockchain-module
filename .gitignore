@@ -10,3 +10,6 @@ cmake-build-debug
 
 # Build directories
 build/
+
+# Artifacts
+libblockchainmodulelib.so
