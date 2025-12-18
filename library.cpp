@@ -37,12 +37,12 @@ public:
         QByteArray configPathBytes = config_path.toUtf8();
         InitializedNomosNodeResult result = start_nomos_node(configPathBytes.constData());
 
-        if (result.error_code != None) {
-            qCritical() << "Failed to start Nomos node. Error code:" << result.error_code;
+        if (!is_ok(&result.error)) {
+            qCritical() << "Failed to start Nomos node. Error code:" << result.error;
             return;
         }
 
-        node = result.nomos_node;
+        node = result.value;
         qInfo() << "Nomos node started successfully";
     }
 
@@ -52,12 +52,12 @@ public:
             return;
         }
 
-        NomosNodeErrorCode error_code = stop_node(node);
+        OperationStatus status = stop_node(node);
 
-        if (error_code != None) {
-            qCritical() << "Failed to stop Nomos node. Error code:" << error_code;
-        } else {
+        if (is_ok(&status)) {
             qInfo() << "Nomos node stopped successfully";
+        } else {
+            qCritical() << "Failed to stop Nomos node. Error code:" << status;
         }
 
         node = nullptr;
