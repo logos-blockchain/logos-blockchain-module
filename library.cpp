@@ -64,11 +64,11 @@ public:
     }
 
     signals:
-    // Required for event forwarding between modules
-    void eventResponse(const QString &eventName, const QVariantList &data) {
-        
-    }
+        // Required for event forwarding between modules
+        void eventResponse(const QString &eventName, const QVariantList &data);
 
 private:
     NomosNode *node;
 };
+
+#include "library.moc"  // Test if this is actually needed

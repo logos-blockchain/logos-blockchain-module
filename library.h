@@ -2,7 +2,14 @@
 #define UNTITLED_LIBRARY_H
 
 #include <core/interface.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 #include <libnomos.h>
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 class LogosBlockchainModuleAPI: public PluginInterface {
 private:

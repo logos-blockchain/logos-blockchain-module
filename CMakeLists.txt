@@ -1,228 +1,205 @@
 cmake_minimum_required(VERSION 3.20)
-project(logos-blockchain-module)
+project(logos-blockchain-module LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_library(blockchainmodulelib SHARED library.cpp)
+# -------------------------
+# Options / Inputs
+# -------------------------
+option(UNTITLED_USE_QT "Enable Qt6 dependency" ON)
+option(COPY_PLUGIN_TO_SOURCE_DIR "Copy built plugin to source dir root (dev convenience)" ON)
 
-# --- Optional Qt dependency (Qt6 preferred, fallback to Qt5) ---
-# Enable this to link Qt Core into the `logos-blockchain-module` library without breaking
-# environments where Qt isn't installed yet.
-option(UNTITLED_USE_QT "Enable Qt (Qt6/Qt5) dependency for blockchain-module" ON)
+set(LOGOS_CPP_SDK_ROOT "" CACHE PATH "Path to logos-cpp-sdk package root (must contain include/core and include/cpp)")
+set(LOGOS_BLOCKCHAIN_ROOT "" CACHE PATH "Path to logos-blockchain source root (read-only in Nix store is OK)")
+
+if(NOT DEFINED LOGOS_CPP_SDK_ROOT OR LOGOS_CPP_SDK_ROOT STREQUAL "")
+  message(FATAL_ERROR "LOGOS_CPP_SDK_ROOT not set. Pass -DLOGOS_CPP_SDK_ROOT=/path/to/logos-cpp-sdk")
+endif()
+
+if(NOT DEFINED LOGOS_BLOCKCHAIN_ROOT OR LOGOS_BLOCKCHAIN_ROOT STREQUAL "")
+  message(FATAL_ERROR "LOGOS_BLOCKCHAIN_ROOT not set. Pass -DLOGOS_BLOCKCHAIN_ROOT=/path/to/logos-blockchain")
+endif()
+
+# -------------------------
+# Qt6
+# -------------------------
 if(UNTITLED_USE_QT)
-  # Auto tools make using Qt headers/classes easier when added later
+  find_package(Qt6 REQUIRED COMPONENTS Core)
   set(CMAKE_AUTOMOC ON)
   set(CMAKE_AUTOUIC ON)
   set(CMAKE_AUTORCC ON)
-
-  # Try to find Qt6 first, then Qt5. Require Core component at minimum.
-  find_package(QT NAMES Qt6 Qt5 QUIET COMPONENTS Core)
-  if(QT_FOUND)
-    find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core)
-    target_link_libraries(blockchainmodulelib PRIVATE Qt${QT_VERSION_MAJOR}::Core)
-    target_compile_definitions(blockchainmodulelib PRIVATE USING_QT)
-  else()
-    message(WARNING "UNTITLED_USE_QT=ON but Qt was not found. Proceeding without Qt. Set CMAKE_PREFIX_PATH to your Qt installation or turn OFF the option.")
-  endif()
+else()
+  message(FATAL_ERROR "UNTITLED_USE_QT=OFF is not supported for this module (it's a Qt plugin).")
 endif()
 
-# --- External dependency: logos-blockchain ---
-# This scaffolding downloads, builds, and stages artifacts from
-# https://github.com/logos-blockchain/logos-blockchain
-# Fill in the TODOs (e.g., GIT_TAG and the actual produced library name).
+# -------------------------
+# Writable stage of logos-blockchain source
+# (Fixes: build.rs/cbindgen writing into source dir inside /nix/store)
+# -------------------------
+set(LOGOS_BLOCKCHAIN_WORKDIR "${CMAKE_BINARY_DIR}/logos_blockchain_src")
+set(LOGOS_BLOCKCHAIN_STAGE_STAMP "${LOGOS_BLOCKCHAIN_WORKDIR}/.staged")
 
-include(ExternalProject)
+add_custom_command(
+        OUTPUT "${LOGOS_BLOCKCHAIN_STAGE_STAMP}"
+        COMMAND ${CMAKE_COMMAND} -E echo "Staging logos-blockchain into writable dir: ${LOGOS_BLOCKCHAIN_WORKDIR}"
+        COMMAND ${CMAKE_COMMAND} -E rm -rf "${LOGOS_BLOCKCHAIN_WORKDIR}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${LOGOS_BLOCKCHAIN_WORKDIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${LOGOS_BLOCKCHAIN_ROOT}" "${LOGOS_BLOCKCHAIN_WORKDIR}"
+        COMMAND ${CMAKE_COMMAND} -E touch "${LOGOS_BLOCKCHAIN_STAGE_STAMP}"
+        VERBATIM
+)
 
-set(LOGOS_STAGE_DIR    "${CMAKE_BINARY_DIR}/logos_stage")
-set(LOGOS_INSTALL_DIR  "${LOGOS_STAGE_DIR}")
+add_custom_target(logos_blockchain_stage ALL
+        DEPENDS "${LOGOS_BLOCKCHAIN_STAGE_STAMP}"
+)
 
-# Ensure staged include/lib directories exist at configure time to avoid
-# INTERFACE_INCLUDE_DIRECTORIES pointing to a non-existent path errors
+# -------------------------
+# Build nomos-c (Rust) and stage outputs
+# -------------------------
+set(LOGOS_STAGE_DIR   "${CMAKE_BINARY_DIR}/logos_stage")
+set(LOGOS_INSTALL_DIR "${LOGOS_STAGE_DIR}")
 file(MAKE_DIRECTORY "${LOGOS_INSTALL_DIR}/include")
 file(MAKE_DIRECTORY "${LOGOS_INSTALL_DIR}/lib")
 
-# --- External dependency: logos-cpp-sdk ---
-# Fetch and stage the C++ SDK so we can include "core/interface.h"
-set(LOGOS_CPP_SDK_STAGE_DIR "${CMAKE_BINARY_DIR}/logos_cpp_sdk_stage")
-file(MAKE_DIRECTORY "${LOGOS_CPP_SDK_STAGE_DIR}/include")
-
-ExternalProject_Add(logos_cpp_sdk_ep
-  GIT_REPOSITORY https://github.com/logos-co/logos-cpp-sdk
-  UPDATE_DISCONNECTED 1
-  GIT_SHALLOW OFF
-  GIT_SUBMODULES ""
-  GIT_SUBMODULES_RECURSE TRUE
-  # The SDK is header-first. We clone it and copy headers to a stable include dir.
-  CONFIGURE_COMMAND ""
-  BUILD_COMMAND ""
-  INSTALL_COMMAND ""
-)
-
-ExternalProject_Get_Property(logos_cpp_sdk_ep SOURCE_DIR)
-
-# Stage headers to a predictable location in our build tree.
-add_custom_command(
-  OUTPUT "${LOGOS_CPP_SDK_STAGE_DIR}/include/.staged"
-  COMMAND ${CMAKE_COMMAND} -E echo "Staging logos-cpp-sdk headers (core -> include/core)"
-  COMMAND ${CMAKE_COMMAND} -E make_directory "${LOGOS_CPP_SDK_STAGE_DIR}/include/core"
-  COMMAND ${CMAKE_COMMAND} -E copy_directory "${SOURCE_DIR}/core" "${LOGOS_CPP_SDK_STAGE_DIR}/include/core"
-  COMMAND ${CMAKE_COMMAND} -E echo "Staging logos-cpp-sdk headers (cpp -> include/cpp)"
-  COMMAND ${CMAKE_COMMAND} -E make_directory "${LOGOS_CPP_SDK_STAGE_DIR}/include/cpp"
-  COMMAND ${CMAKE_COMMAND} -E copy_directory "${SOURCE_DIR}/cpp" "${LOGOS_CPP_SDK_STAGE_DIR}/include/cpp"
-  COMMAND ${CMAKE_COMMAND} -E touch "${LOGOS_CPP_SDK_STAGE_DIR}/include/.staged"
-  DEPENDS logos_cpp_sdk_ep
-  VERBATIM
-)
-
-add_custom_target(logos_cpp_sdk_stage ALL DEPENDS "${LOGOS_CPP_SDK_STAGE_DIR}/include/.staged")
-
-# Expose an interface target so consumers can include <core/interface.h>
-add_library(logos_cpp_sdk INTERFACE)
-add_dependencies(logos_cpp_sdk logos_cpp_sdk_stage)
-target_include_directories(logos_cpp_sdk INTERFACE "${LOGOS_CPP_SDK_STAGE_DIR}/include")
-
-ExternalProject_Add(logos_ep
-  GIT_REPOSITORY https://github.com/logos-blockchain/logos-blockchain
-  # Use the repository's default branch (no explicit tag) to avoid invalid refs
-  UPDATE_DISCONNECTED 1
-  GIT_SHALLOW   OFF
-  GIT_SUBMODULES ""                 # ensure submodules are fetched
-  GIT_SUBMODULES_RECURSE TRUE
-  UPDATE_COMMAND ""                  # disable auto-update during configure
-  CONFIGURE_COMMAND ""               # repo is not a CMake project; skip configure
-  BUILD_COMMAND ""                   # build is driven by cargo in a separate step
-  INSTALL_COMMAND ""                 # installation handled by custom staging
-  CMAKE_ARGS
-    -DCMAKE_INSTALL_PREFIX=${LOGOS_INSTALL_DIR}
-    -DCMAKE_BUILD_TYPE=$<IF:$<CONFIG:>,${CMAKE_BUILD_TYPE},Release>
-    -DBUILD_SHARED_LIBS=ON           # TODO: keep/adjust depending on project options
-  INSTALL_DIR ${LOGOS_INSTALL_DIR}
-)
-
-# --- Extra step: build Rust crate with cargo after download ---
-# The crate lives at the repo root and we build package `nomos-c` in release mode.
-# Artifacts are expected in <repo>/target/release and headers at <repo>/nomos-c/ (crate root).
-ExternalProject_Get_Property(logos_ep SOURCE_DIR)
-
-# Allow easy adjustments from CLion cache: shared library names and header file name
-# Decide extension and default names per platform. Users can still override via cache.
+# Platform naming
 if(APPLE)
   set(NOMOS_EXT ".dylib")
   set(NOMOS_BIN_DIR "lib")
 elseif(WIN32)
   set(NOMOS_EXT ".dll")
-  # On Windows, runtime DLLs typically go to bin, import libs to lib
   set(NOMOS_BIN_DIR "bin")
 else()
   set(NOMOS_EXT ".so")
   set(NOMOS_BIN_DIR "lib")
 endif()
 
-# Source (as produced by cargo) and staged (the name we expose to consumers)
-# Note: The crate appears to produce liblibnomos on Unix per current setup.
-set(NOMOS_C_SOURCE_DYLIB_NAME "liblibnomos${NOMOS_EXT}" CACHE STRING "Actual shared library filename produced by cargo in target/release")
-set(NOMOS_C_DYLIB_NAME "libnomos${NOMOS_EXT}" CACHE STRING "Staged shared library filename to expose to consumers")
-set(NOMOS_C_HEADER_NAME "libnomos.h" CACHE STRING "Header file to stage from nomos-c crate root")
+# What cargo produces and what we stage as
+set(NOMOS_C_SOURCE_DYLIB_NAME "liblibnomos${NOMOS_EXT}" CACHE STRING "Shared library filename produced by cargo in target/release")
+set(NOMOS_C_STAGED_DYLIB_NAME "libnomos${NOMOS_EXT}" CACHE STRING "Staged shared library filename")
+set(NOMOS_C_HEADER_NAME "libnomos.h" CACHE STRING "Header file name (in nomos-c crate root)")
 
-# Compute effective names that follow current platform extension, even if cache holds a different one
-# This avoids stale cache issues when switching platforms or build dirs without clearing cache.
-set(_nomos_ext_regex "\\.(dylib|so|dll)$")
-set(NOMOS_C_SOURCE_DYLIB_NAME_EFFECTIVE "${NOMOS_C_SOURCE_DYLIB_NAME}")
-set(NOMOS_C_DYLIB_NAME_EFFECTIVE        "${NOMOS_C_DYLIB_NAME}")
-string(REGEX MATCH ${_nomos_ext_regex} _src_has_ext "${NOMOS_C_SOURCE_DYLIB_NAME}")
-string(REGEX MATCH ${_nomos_ext_regex} _dst_has_ext "${NOMOS_C_DYLIB_NAME}")
-if(_src_has_ext AND NOT NOMOS_C_SOURCE_DYLIB_NAME MATCHES ".*${NOMOS_EXT}$")
-  string(REGEX REPLACE ${_nomos_ext_regex} "${NOMOS_EXT}" NOMOS_C_SOURCE_DYLIB_NAME_EFFECTIVE "${NOMOS_C_SOURCE_DYLIB_NAME}")
-  message(STATUS "Adjusting NOMOS_C_SOURCE_DYLIB_NAME to platform extension: ${NOMOS_C_SOURCE_DYLIB_NAME} -> ${NOMOS_C_SOURCE_DYLIB_NAME_EFFECTIVE}")
-endif()
-if(_dst_has_ext AND NOT NOMOS_C_DYLIB_NAME MATCHES ".*${NOMOS_EXT}$")
-  string(REGEX REPLACE ${_nomos_ext_regex} "${NOMOS_EXT}" NOMOS_C_DYLIB_NAME_EFFECTIVE "${NOMOS_C_DYLIB_NAME}")
-  message(STATUS "Adjusting NOMOS_C_DYLIB_NAME to platform extension: ${NOMOS_C_DYLIB_NAME} -> ${NOMOS_C_DYLIB_NAME_EFFECTIVE}")
-endif()
-
-set(NOMOS_STAGED_DYLIB "${LOGOS_INSTALL_DIR}/lib/${NOMOS_C_DYLIB_NAME_EFFECTIVE}")
+set(NOMOS_STAGED_DYLIB  "${LOGOS_INSTALL_DIR}/lib/${NOMOS_C_STAGED_DYLIB_NAME}")
 set(NOMOS_STAGED_HEADER "${LOGOS_INSTALL_DIR}/include/${NOMOS_C_HEADER_NAME}")
 
-# Provide actual rules that produce each staged file independently so the
-# build regenerates whichever is missing. Each custom command uses the same
-# cargo build step (idempotent if already built) and then copies the needed
-# artifact. Declaring them separately ensures CMake will re-run the rule when
-# either output is absent.
+# Build output dir for cargo (writable)
+set(CARGO_TARGET_DIR "${CMAKE_BINARY_DIR}/cargo-target")
+
+# We will patch the SONAME so the plugin depends on "libnomos.so" not "logos_stage/lib/libnomos.so".
+find_program(PATCHELF_EXE patchelf)
 
 add_custom_command(
-  OUTPUT "${NOMOS_STAGED_DYLIB}"
-  COMMAND ${CMAKE_COMMAND} -E echo "Ensuring ${NOMOS_C_DYLIB_NAME_EFFECTIVE} exists (building nomos-c if needed)"
-  COMMAND ${CMAKE_COMMAND} -E env CARGO_TERM_COLOR=always cargo build --release --package nomos-c
-  COMMAND ${CMAKE_COMMAND} -E make_directory "${LOGOS_INSTALL_DIR}/lib"
-  COMMAND ${CMAKE_COMMAND} -E make_directory "${LOGOS_INSTALL_DIR}/bin"
-  COMMAND ${CMAKE_COMMAND} -E copy "${SOURCE_DIR}/target/release/${NOMOS_C_SOURCE_DYLIB_NAME_EFFECTIVE}" "${LOGOS_INSTALL_DIR}/${NOMOS_BIN_DIR}/${NOMOS_C_DYLIB_NAME_EFFECTIVE}"
-  DEPENDS logos_ep
-  WORKING_DIRECTORY ${SOURCE_DIR}
-  VERBATIM
+        OUTPUT "${NOMOS_STAGED_DYLIB}"
+        COMMAND ${CMAKE_COMMAND} -E echo "Building nomos-c (Rust) from writable copy: ${LOGOS_BLOCKCHAIN_WORKDIR}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CARGO_TARGET_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E env
+        CARGO_TERM_COLOR=always
+        CARGO_TARGET_DIR=${CARGO_TARGET_DIR}
+        cargo build --release --package nomos-c
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${LOGOS_INSTALL_DIR}/lib"
+        COMMAND ${CMAKE_COMMAND} -E copy
+        "${CARGO_TARGET_DIR}/release/${NOMOS_C_SOURCE_DYLIB_NAME}"
+        "${NOMOS_STAGED_DYLIB}"
+        # Patch SONAME (Linux only) so DT_NEEDED becomes "libnomos.so"
+        COMMAND ${CMAKE_COMMAND} -E echo "Patching SONAME of ${NOMOS_STAGED_DYLIB_NAME}"
+        COMMAND ${CMAKE_COMMAND} -E env
+        ${PATCHELF_EXE} --set-soname "${NOMOS_C_STAGED_DYLIB_NAME}" "${NOMOS_STAGED_DYLIB}"
+        DEPENDS "${LOGOS_BLOCKCHAIN_STAGE_STAMP}"
+        WORKING_DIRECTORY "${LOGOS_BLOCKCHAIN_WORKDIR}"
+        VERBATIM
 )
 
 add_custom_command(
-  OUTPUT "${NOMOS_STAGED_HEADER}"
-  COMMAND ${CMAKE_COMMAND} -E echo "Ensuring libnomos.h exists (building/staging if needed)"
-  # Building also ensures any generated headers are up-to-date; harmless if not needed
-  COMMAND ${CMAKE_COMMAND} -E env CARGO_TERM_COLOR=always cargo build --release --package nomos-c
-  COMMAND ${CMAKE_COMMAND} -E make_directory "${LOGOS_INSTALL_DIR}/include"
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SOURCE_DIR}/nomos-c/${NOMOS_C_HEADER_NAME}" "${LOGOS_INSTALL_DIR}/include/"
-  DEPENDS logos_ep
-  WORKING_DIRECTORY ${SOURCE_DIR}
-  VERBATIM
+        OUTPUT "${NOMOS_STAGED_HEADER}"
+        COMMAND ${CMAKE_COMMAND} -E echo "Staging ${NOMOS_C_HEADER_NAME} from writable copy"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${LOGOS_INSTALL_DIR}/include"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${LOGOS_BLOCKCHAIN_WORKDIR}/nomos-c/${NOMOS_C_HEADER_NAME}"
+        "${NOMOS_STAGED_HEADER}"
+        DEPENDS "${NOMOS_STAGED_DYLIB}"
+        VERBATIM
 )
 
 add_custom_target(logos_cargo_build ALL
-  DEPENDS "${NOMOS_STAGED_DYLIB}" "${NOMOS_STAGED_HEADER}"
+        DEPENDS "${NOMOS_STAGED_DYLIB}" "${NOMOS_STAGED_HEADER}"
 )
 
-# Import the staged dynamic library from the cargo build
-set(LOGOS_IMPORTED_LIB "${LOGOS_INSTALL_DIR}/${NOMOS_BIN_DIR}/${NOMOS_C_DYLIB_NAME_EFFECTIVE}")
-add_library(logos SHARED IMPORTED GLOBAL)
-set_target_properties(logos PROPERTIES
-  IMPORTED_LOCATION "${LOGOS_IMPORTED_LIB}"
-  INTERFACE_INCLUDE_DIRECTORIES "${LOGOS_INSTALL_DIR}/include"
+add_library(nomos_c SHARED IMPORTED GLOBAL)
+set_target_properties(nomos_c PROPERTIES
+        IMPORTED_LOCATION "${NOMOS_STAGED_DYLIB}"
+        INTERFACE_INCLUDE_DIRECTORIES "${LOGOS_INSTALL_DIR}/include"
+)
+add_dependencies(nomos_c logos_cargo_build)
+
+# -------------------------
+# logos-cpp-sdk headers (viewer-style)
+# -------------------------
+add_library(logos_cpp_sdk INTERFACE)
+target_include_directories(logos_cpp_sdk INTERFACE
+        "${LOGOS_CPP_SDK_ROOT}/include/core"
+        "${LOGOS_CPP_SDK_ROOT}/include/cpp"
+        "${LOGOS_CPP_SDK_ROOT}/include"
 )
 
-# On Windows, also set IMPORTED_IMPLIB if present (name assumed nomos.lib)
-if(WIN32)
-  # Users can override via cache if different
-  set(NOMOS_IMPORT_LIB_NAME "nomos.lib" CACHE STRING "Import library name for Windows")
-  set_target_properties(logos PROPERTIES
-    IMPORTED_IMPLIB "${LOGOS_INSTALL_DIR}/lib/${NOMOS_IMPORT_LIB_NAME}"
+# -------------------------
+# Qt plugin target
+# -------------------------
+set(PLUGIN_TARGET blockchainmodulelib)
+
+qt_add_plugin(${PLUGIN_TARGET}
+        CLASS_NAME LogosBlockchainModule
+)
+
+target_sources(${PLUGIN_TARGET} PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/library.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json"
+)
+
+target_link_libraries(${PLUGIN_TARGET} PRIVATE
+        Qt6::Core
+        nomos_c
+        logos_cpp_sdk
+)
+
+target_compile_definitions(${PLUGIN_TARGET} PRIVATE USING_QT)
+
+set_target_properties(${PLUGIN_TARGET} PROPERTIES
+        AUTOMOC ON
+        AUTOUIC ON
+        AUTORCC ON
+)
+
+add_dependencies(${PLUGIN_TARGET} logos_cargo_build logos_blockchain_stage)
+
+# Runtime: prefer libnomos next to the plugin
+if(APPLE)
+  set_target_properties(${PLUGIN_TARGET} PROPERTIES
+          BUILD_RPATH "@loader_path"
+          INSTALL_RPATH "@loader_path"
+  )
+elseif(UNIX)
+  set_target_properties(${PLUGIN_TARGET} PROPERTIES
+          BUILD_RPATH "$ORIGIN"
+          INSTALL_RPATH "$ORIGIN"
   )
 endif()
-add_dependencies(logos logos_cargo_build)
 
-# Link the imported dependency if you plan to use it from this target
-target_link_libraries(blockchainmodulelib PRIVATE logos)
+# Copy libnomos next to plugin in build output for runtime loading
+add_custom_command(TARGET ${PLUGIN_TARGET} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${NOMOS_STAGED_DYLIB}"
+        "$<TARGET_FILE_DIR:${PLUGIN_TARGET}>/${NOMOS_C_STAGED_DYLIB_NAME}"
+        COMMENT "Copying ${NOMOS_C_STAGED_DYLIB_NAME} next to plugin for runtime loading"
+        VERBATIM
+)
 
-# Make SDK headers available to this target and ensure they are staged before build
-target_link_libraries(blockchainmodulelib PRIVATE logos_cpp_sdk)
-add_dependencies(blockchainmodulelib logos_cpp_sdk_stage)
-
-# Ensure our C++ target waits for the cargo-built artifacts to be staged before linking
-add_dependencies(blockchainmodulelib logos_cargo_build)
-
-# --- Post-build: copy the compiled library to project root ---
-add_custom_command(TARGET blockchainmodulelib POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different
-          "$<TARGET_FILE:blockchainmodulelib>"
-          "${CMAKE_SOURCE_DIR}/$<TARGET_FILE_NAME:blockchainmodulelib>"
-  COMMENT "Copying $<TARGET_FILE_NAME:blockchainmodulelib> to project root"
-  VERBATIM)
-
-# Optional manual staging template (use if the project doesn't install what you need)
-# ExternalProject_Get_Property(logos_ep BINARY_DIR SOURCE_DIR)
-# add_custom_target(logos_stage_manual ALL
-#   COMMAND ${CMAKE_COMMAND} -E make_directory "${LOGOS_INSTALL_DIR}/lib"
-#   COMMAND ${CMAKE_COMMAND} -E make_directory "${LOGOS_INSTALL_DIR}/include"
-#   # TODO: copy actual produced dylib from ${BINARY_DIR} to ${LOGOS_INSTALL_DIR}/lib
-#   # COMMAND ${CMAKE_COMMAND} -E copy "${BINARY_DIR}/path/to/libactual.dylib" "${LOGOS_INSTALL_DIR}/lib/"
-#   # TODO: copy public headers from ${SOURCE_DIR}/include (or other) to staged include dir
-#   # COMMAND ${CMAKE_COMMAND} -E copy_directory "${SOURCE_DIR}/include" "${LOGOS_INSTALL_DIR}/include"
-#   DEPENDS logos_ep
-#   VERBATIM
-# )
-# add_dependencies(logos logos_stage_manual)
+# Dev convenience: copy the plugin to repo root
+if(COPY_PLUGIN_TO_SOURCE_DIR)
+  add_custom_command(TARGET ${PLUGIN_TARGET} POST_BUILD
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "$<TARGET_FILE:${PLUGIN_TARGET}>"
+          "${CMAKE_SOURCE_DIR}/$<TARGET_FILE_NAME:${PLUGIN_TARGET}>"
+          COMMENT "Copying plugin to source root"
+          VERBATIM
+  )
+endif()
