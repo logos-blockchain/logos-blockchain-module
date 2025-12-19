@@ -1,59 +1,55 @@
 #include "library.h"
 
-#include <QtCore/QObject>
 #include <QtCore/QDebug>
-#include <core/interface.h>
 
-class LogosBlockchainModule : public QObject, public LogosBlockchainModuleAPI {
+class LogosBlockchainModule : public LogosBlockchainModuleAPI {
     Q_OBJECT
     Q_PLUGIN_METADATA(IID LogosBlockchainModuleInterface_iid FILE "metadata.json")
-    Q_INTERFACES(LogosBlockchainModuleAPI PluginInterface)
+    Q_INTERFACES(PluginInterface)
+
+private:
+    NomosNode* node = nullptr;
+
 public:
-    LogosBlockchainModule() : node(nullptr) {
+    LogosBlockchainModule() = default;
+
+    ~LogosBlockchainModule() override {
+        if (node) stop();
     }
 
-    virtual ~LogosBlockchainModule() {
-        if (node != nullptr) {
-            stop();
-        }
-    }
-
-    // PluginInterface implementation
-    QString name() const override { return "logos-blockchain-module"; }
+    QString name() const override { return "liblogos-blockchain-module"; }
     QString version() const override { return "1.0.0"; }
 
-    void initLogos(LogosAPI* logosAPIInstance) {
+    void initLogos(LogosAPI* logosAPIInstance) override {
         logosAPI = logosAPIInstance;
-        // logos = new LogosModules(logosAPI); // generated wrappers aggregator
-        // logos->core_manager.setEventSource(this); // enable trigger() helper
     }
 
-    Q_INVOKABLE void start(const QString &config_path) override {
-        if (node != nullptr) {
+   Q_INVOKABLE int start(const QString& config_path) override {
+        if (node) {
             qWarning() << "Node already started";
-            return;
+            return 1;
         }
 
-        QByteArray configPathBytes = config_path.toUtf8();
-        InitializedNomosNodeResult result = start_nomos_node(configPathBytes.constData());
+        const QByteArray path = config_path.toUtf8();
+        InitializedNomosNodeResult result = start_nomos_node(path.constData());
 
         if (!is_ok(&result.error)) {
             qCritical() << "Failed to start Nomos node. Error code:" << result.error;
-            return;
+            return 2;
         }
 
         node = result.value;
         qInfo() << "Nomos node started successfully";
+        return 0;
     }
 
-    Q_INVOKABLE void stop() override {
-        if (node == nullptr) {
+   Q_INVOKABLE void stop() override {
+        if (!node) {
             qWarning() << "Node not running";
             return;
         }
 
-        OperationStatus status = stop_node(node);
-
+        const OperationStatus status = stop_node(node);
         if (is_ok(&status)) {
             qInfo() << "Nomos node stopped successfully";
         } else {
@@ -62,13 +58,6 @@ public:
 
         node = nullptr;
     }
-
-    signals:
-        // Required for event forwarding between modules
-        void eventResponse(const QString &eventName, const QVariantList &data);
-
-private:
-    NomosNode *node;
 };
 
-#include "library.moc"  // Required. Must be at the bottom.
+#include "library.moc"

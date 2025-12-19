@@ -9,4 +9,5 @@ cmake_install.cmake
 cmake-build-debug
 
 # Artifacts
-libblockchainmodulelib.so
+liblogos-blockchain-module.so
+liblogos-blockchain-module.log

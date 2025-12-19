@@ -1,5 +1,5 @@
-#ifndef UNTITLED_LIBRARY_H
-#define UNTITLED_LIBRARY_H
+#ifndef LOGOS_BLOCKCHAIN_MODULE_API_H
+#define LOGOS_BLOCKCHAIN_MODULE_API_H
 
 #include <core/interface.h>
 
@@ -8,26 +8,25 @@ extern "C" {
 #endif
 #include <libnomos.h>
 #ifdef __cplusplus
-} // extern "C"
+}
 #endif
 
-class LogosBlockchainModuleAPI: public PluginInterface {
-private:
-    NomosNode* node;
+class LogosBlockchainModuleAPI : public QObject, public PluginInterface {
+    Q_OBJECT
+
 public:
-    virtual ~LogosBlockchainModuleAPI() {}
+    using QObject::QObject;
+    ~LogosBlockchainModuleAPI() override = default;
 
-    // Public API methods - must be Q_INVOKABLE for remote access
-    Q_INVOKABLE virtual void start(const QString& config_path) = 0;
+    Q_INVOKABLE virtual int start(const QString& config_path) = 0;
     Q_INVOKABLE virtual void stop() = 0;
-
-    Q_INVOKABLE void initLogos(LogosAPI* logosAPIInstance);
+    Q_INVOKABLE virtual void initLogos(LogosAPI* logosAPIInstance) = 0;
 
     signals:
-        // Required for event forwarding between modules
-        void eventResponse(const QString &eventName, const QVariantList &data);
+        void eventResponse(const QString& eventName, const QVariantList& data);
 };
-// Register interface with Qt's meta-object system
+
 #define LogosBlockchainModuleInterface_iid "org.logos.blockchaininterface"
 Q_DECLARE_INTERFACE(LogosBlockchainModuleAPI, LogosBlockchainModuleInterface_iid)
-#endif // UNTITLED_LIBRARY_H
+
+#endif
