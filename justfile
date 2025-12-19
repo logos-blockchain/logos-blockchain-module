@@ -1,7 +1,5 @@
-default:
-    just build
+default: build
 
-# One-time (or when CMakeLists.txt changes)
 configure:
     test -n "${LOGOS_CPP_SDK_ROOT}" || (echo "LOGOS_CPP_SDK_ROOT not set" && exit 1)
     test -n "${LOGOS_BLOCKCHAIN_ROOT}" || (echo "LOGOS_BLOCKCHAIN_ROOT not set" && exit 1)
@@ -11,18 +9,22 @@ configure:
       -DLOGOS_BLOCKCHAIN_ROOT="${LOGOS_BLOCKCHAIN_ROOT}" \
       -DCOPY_PLUGIN_TO_SOURCE_DIR=ON
 
-# Build only (assumes configure already ran)
 build:
     cmake --build build --parallel --target blockchainmodulelib
 
-# Build via Nix
-nix:
-    nix build .#default -L
-
-# Enter dev shell
-dev:
-    nix develop .#
+update:
+    rm -rf build/logos_blockchain_src
+    rm -f build/logos_blockchain_src/.staged
+    rm -rf build/logos_stage
+    cmake --build build --parallel --target logos_blockchain_stage
+    cmake --build build --parallel --target logos_cargo_build
+    just build
 
 clean:
     rm -rf build
     rm -f libblockchainmodulelib.so
+
+rebuild: clean configure build
+
+run:
+    ../logos-module-viewer/result/bin/logos-module-viewer --module libblockchainmodulelib.so > libblockchainmodulelib.log 2>&1

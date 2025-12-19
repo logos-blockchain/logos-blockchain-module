@@ -71,4 +71,4 @@ private:
     NomosNode *node;
 };
 
-#include "library.moc"  // Test if this is actually needed
+#include "library.moc"  // Required. Must be at the bottom.
