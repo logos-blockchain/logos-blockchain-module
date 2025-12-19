@@ -11,3 +11,6 @@ cmake-build-debug
 # Artifacts
 liblogos-blockchain-module.so
 liblogos-blockchain-module.log
+
+# Node
+nomos_db/

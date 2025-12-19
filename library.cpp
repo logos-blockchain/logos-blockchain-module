@@ -2,10 +2,17 @@
 
 #include <QtCore/QDebug>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+#include <libnomos.h>
+#ifdef __cplusplus
+}
+#endif
+
 class LogosBlockchainModule : public LogosBlockchainModuleAPI {
     Q_OBJECT
     Q_PLUGIN_METADATA(IID LogosBlockchainModuleInterface_iid FILE "metadata.json")
-    Q_INTERFACES(PluginInterface)
 
 private:
     NomosNode* node = nullptr;
@@ -24,7 +31,7 @@ public:
         logosAPI = logosAPIInstance;
     }
 
-   Q_INVOKABLE int start(const QString& config_path) override {
+    Q_INVOKABLE int start(const QString& config_path) override {
         if (node) {
             qWarning() << "Node already started";
             return 1;
@@ -43,7 +50,7 @@ public:
         return 0;
     }
 
-   Q_INVOKABLE void stop() override {
+    Q_INVOKABLE void stop() override {
         if (!node) {
             qWarning() << "Node not running";
             return;

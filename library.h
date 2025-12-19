@@ -3,16 +3,9 @@
 
 #include <core/interface.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-#include <libnomos.h>
-#ifdef __cplusplus
-}
-#endif
-
 class LogosBlockchainModuleAPI : public QObject, public PluginInterface {
     Q_OBJECT
+    Q_INTERFACES(PluginInterface)
 
 public:
     using QObject::QObject;
