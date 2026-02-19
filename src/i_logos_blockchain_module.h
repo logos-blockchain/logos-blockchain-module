@@ -18,11 +18,12 @@ public:
     virtual int stop() = 0;
     virtual QString wallet_get_balance(const QString& addressHex) = 0;
     virtual QString wallet_transfer_funds(
-        const QString& changePublicKey, 
-        const QStringList& senderAddresses, 
-        const QString& recipientAddress, 
-        const QString& amount, 
-        const QString& optionalTipHex) = 0;
+        const QString& changePublicKey,
+        const QStringList& senderAddresses,
+        const QString& recipientAddress,
+        const QString& amount,
+        const QString& optionalTipHex
+    ) = 0;
     virtual QStringList wallet_get_known_addresses() = 0;
 };
 

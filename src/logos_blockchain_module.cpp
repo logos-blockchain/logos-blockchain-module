@@ -23,7 +23,7 @@ namespace {
             return {};
         return bytes;
     }
-}
+} // namespace
 
 void LogosBlockchainModule::onNewBlockCallback(const char* block) {
     if (s_instance) {
@@ -150,12 +150,11 @@ QString LogosBlockchainModule::wallet_get_balance(const QString& addressHex) {
         return QStringLiteral("Error: Address must be 64 hex characters (32 bytes).");
     }
 
-    auto [value, error] = get_balance(node, 
-        reinterpret_cast<const uint8_t*>(bytes.constData()), nullptr);
+    auto [value, error] = get_balance(node, reinterpret_cast<const uint8_t*>(bytes.constData()), nullptr);
     if (!is_ok(&error)) {
         return QStringLiteral("Error: Failed to get balance: ") + QString::number(error);
     }
-    
+
     return QString::number(value);
 }
 
@@ -231,8 +230,8 @@ QString LogosBlockchainModule::wallet_transfer_funds(
     const QString& senderAddress,
     const QString& recipientAddress,
     const QString& amount,
-    const QString& optionalTipHex)
-{
+    const QString& optionalTipHex
+) {
     return wallet_transfer_funds(changePublicKey, QStringList{senderAddress}, recipientAddress, amount, optionalTipHex);
 }
 
@@ -385,7 +384,7 @@ namespace {
             }
         }
     };
-}
+} // namespace
 
 int LogosBlockchainModule::generate_user_config(const QVariantMap& args) {
     const OwnedGenerateConfigArgs owned_args(args);
