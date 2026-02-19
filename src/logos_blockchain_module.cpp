@@ -261,6 +261,21 @@ QStringList LogosBlockchainModule::wallet_get_known_addresses() {
     return out;
 }
 
+int LogosBlockchainModule::generate_user_config(const GenerateConfigArgs* args) {
+    if (!args) {
+        qWarning() << "Could not execute the operation: The arguments are null.";
+        return 1;
+    }
+
+    const OperationStatus status = ::generate_user_config(*args);
+    if (!is_ok(&status)) {
+        qCritical() << "Failed to generate user config. Error:" << status;
+        return 1;
+    }
+
+    return 0;
+}
+
 void LogosBlockchainModule::emitEvent(const QString& eventName, const QVariantList& data) {
     if (!logosAPI) {
         qWarning() << "LogosBlockchainModule: LogosAPI not available, cannot emit" << eventName;
