@@ -261,13 +261,136 @@ QStringList LogosBlockchainModule::wallet_get_known_addresses() {
     return out;
 }
 
-int LogosBlockchainModule::generate_user_config(const GenerateConfigArgs* args) {
-    if (!args) {
-        qWarning() << "Could not execute the operation: The arguments are null.";
-        return 1;
-    }
+namespace {
+    // Wrapper that owns data and provides GenerateConfigArgs
+    struct OwnedGenerateConfigArgs {
+        std::vector<QByteArray> initial_peers_data;
+        std::vector<const char*> initial_peers_ptrs;
+        uint32_t initial_peers_count_val;
+        QByteArray output_data;
+        uint16_t net_port_val;
+        uint16_t blend_port_val;
+        QByteArray http_addr_data;
+        QByteArray external_address_data;
+        bool no_public_ip_check_val;
+        QByteArray custom_deployment_config_path_data;
+        Deployment deployment_val;
+        QByteArray state_path_data;
 
-    const OperationStatus status = ::generate_user_config(*args);
+        // The FFI struct with pointers into owned data
+        GenerateConfigArgs ffi_args;
+
+        // Constructor that populates both owned data and FFI struct
+        explicit OwnedGenerateConfigArgs(const QVariantMap& args) {
+            ffi_args = {};
+
+            // initial_peers (QStringList -> const char**)
+            if (args.contains("initial_peers")) {
+                QStringList peers = args["initial_peers"].toStringList();
+                initial_peers_count_val = static_cast<uint32_t>(peers.size());
+
+                for (const QString& peer : peers) {
+                    initial_peers_data.push_back(peer.toUtf8());
+                }
+                for (const QByteArray& data : initial_peers_data) {
+                    initial_peers_ptrs.push_back(data.constData());
+                }
+
+                ffi_args.initial_peers = initial_peers_ptrs.data();
+                ffi_args.initial_peers_count = &initial_peers_count_val;
+            } else {
+                ffi_args.initial_peers = nullptr;
+                ffi_args.initial_peers_count = nullptr;
+            }
+
+            // output (QString -> const char*)
+            if (args.contains("output")) {
+                output_data = args["output"].toString().toUtf8();
+                ffi_args.output = output_data.constData();
+            } else {
+                ffi_args.output = nullptr;
+            }
+
+            // net_port (int -> const uint16_t*)
+            if (args.contains("net_port")) {
+                net_port_val = static_cast<uint16_t>(args["net_port"].toInt());
+                ffi_args.net_port = &net_port_val;
+            } else {
+                ffi_args.net_port = nullptr;
+            }
+
+            // blend_port (int -> const uint16_t*)
+            if (args.contains("blend_port")) {
+                blend_port_val = static_cast<uint16_t>(args["blend_port"].toInt());
+                ffi_args.blend_port = &blend_port_val;
+            } else {
+                ffi_args.blend_port = nullptr;
+            }
+
+            // http_addr (QString -> const char*)
+            if (args.contains("http_addr")) {
+                http_addr_data = args["http_addr"].toString().toUtf8();
+                ffi_args.http_addr = http_addr_data.constData();
+            } else {
+                ffi_args.http_addr = nullptr;
+            }
+
+            // external_address (QString -> const char*)
+            if (args.contains("external_address")) {
+                external_address_data = args["external_address"].toString().toUtf8();
+                ffi_args.external_address = external_address_data.constData();
+            } else {
+                ffi_args.external_address = nullptr;
+            }
+
+            // no_public_ip_check (bool -> const bool*)
+            if (args.contains("no_public_ip_check")) {
+                no_public_ip_check_val = args["no_public_ip_check"].toBool();
+                ffi_args.no_public_ip_check = &no_public_ip_check_val;
+            } else {
+                ffi_args.no_public_ip_check = nullptr;
+            }
+
+            // deployment (const struct Deployment*)
+            // Expected format: { "deployment": { "well_known_deployment": "devnet" } }
+            //              OR: { "deployment": { "config_path": "/path/to/config" } }
+            if (args.contains("deployment")) {
+                QVariantMap deployment = args["deployment"].toMap();
+
+                if (deployment.contains("well_known_deployment")) {
+                    deployment_val.deployment_type = DeploymentType::WellKnown;
+                    QString wellknown = deployment["well_known_deployment"].toString();
+                    if (wellknown == "devnet") {
+                        deployment_val.well_known_deployment = WellKnownDeployment::Devnet;
+                    }
+                    deployment_val.custom_deployment_config_path = nullptr;
+                } else if (deployment.contains("config_path")) {
+                    deployment_val.deployment_type = DeploymentType::Custom;
+                    deployment_val.well_known_deployment = static_cast<WellKnownDeployment>(0);
+                    custom_deployment_config_path_data = deployment["config_path"].toString().toUtf8();
+                    deployment_val.custom_deployment_config_path = custom_deployment_config_path_data.constData();
+                }
+
+                ffi_args.deployment = &deployment_val;
+            } else {
+                ffi_args.deployment = nullptr;
+            }
+
+            // state_path (QString -> const char*)
+            if (args.contains("state_path")) {
+                state_path_data = args["state_path"].toString().toUtf8();
+                ffi_args.state_path = state_path_data.constData();
+            } else {
+                ffi_args.state_path = nullptr;
+            }
+        }
+    };
+}
+
+int LogosBlockchainModule::generate_user_config(const QVariantMap& args) {
+    const OwnedGenerateConfigArgs owned_args(args);
+
+    const OperationStatus status = ::generate_user_config(owned_args.ffi_args);
     if (!is_ok(&status)) {
         qCritical() << "Failed to generate user config. Error:" << status;
         return 1;

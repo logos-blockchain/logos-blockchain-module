@@ -1,6 +1,7 @@
 #pragma once
+
 #include "i_logos_blockchain_module.h"
-#include <QtCore/QDebug>
+
 #include <iostream>
 #ifdef __cplusplus
 extern "C" {
@@ -26,7 +27,7 @@ public:
     Q_INVOKABLE void initLogos(LogosAPI*) override;
 
     // Logos Blockchain
-    Q_INVOKABLE int generate_user_config(const GenerateConfigArgs*) override;
+    Q_INVOKABLE int generate_user_config(const QVariantMap& args) override;
     Q_INVOKABLE int start(const QString& config_path, const QString& deployment) override;
     Q_INVOKABLE int stop() override;
     Q_INVOKABLE QString wallet_get_balance(const QString& addressHex) override;
