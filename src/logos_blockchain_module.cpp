@@ -398,6 +398,11 @@ int LogosBlockchainModule::generate_user_config(const QVariantMap& args) {
     return 0;
 }
 
+int LogosBlockchainModule::generate_user_config_from_str(const QString& args) {
+    const QVariantMap parsed_args = QJsonDocument::fromJson(args.toUtf8()).object().toVariantMap();
+    return generate_user_config(parsed_args);
+}
+
 void LogosBlockchainModule::emitEvent(const QString& eventName, const QVariantList& data) {
     if (!logosAPI) {
         qWarning() << "LogosBlockchainModule: LogosAPI not available, cannot emit" << eventName;
