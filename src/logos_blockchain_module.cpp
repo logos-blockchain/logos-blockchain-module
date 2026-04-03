@@ -290,13 +290,16 @@ int LogosBlockchainModule::blend_join_as_core_node(
         return 4;
     }
 
+    // QString is UTF-16, but the FFI requires UTF-8.
+    // locatorsData owns the converted buffers, while locatorsPtrs holds raw pointers into them for the FFI call.
+    // Using reserve() prevents reallocation, keeping the constData() pointers stable.
     std::vector<QByteArray> locatorsData;
     std::vector<const char*> locatorsPtrs;
+    locatorsData.reserve(locators.size());
+    locatorsPtrs.reserve(locators.size());
     for (const QString& locator : locators) {
         locatorsData.push_back(locator.toUtf8());
-    }
-    for (const QByteArray& data : locatorsData) {
-        locatorsPtrs.push_back(data.constData());
+        locatorsPtrs.push_back(locatorsData.back().constData());
     }
 
     auto [value, error] = ::blend_join_as_core_node(
