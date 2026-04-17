@@ -155,7 +155,7 @@ namespace environment {
     constexpr auto LOGOS_BLOCKCHAIN_CIRCUITS = "LOGOS_BLOCKCHAIN_CIRCUITS";
 
     // Checks the directory exists and ensures it contains at least one file to avoid an empty directory false positive
-    bool isCircuitsPathValid(const QString& path) {
+    bool is_circuits_path_valid(const QString& path) {
         const QDir directory(path);
         return directory.exists() && !directory.entryList(QDir::Files | QDir::NoDotAndDotDot).isEmpty();
     }
@@ -164,39 +164,41 @@ namespace environment {
     // This has two side effects:
     // - Modifies the environment variable LOGOS_BLOCKCHAIN_CIRCUITS.
     // - Terminates the program if no valid circuits directory is found.
-    void setupCircuitsPath(const LogosAPI& logosApi) {
+    void setup_circuits_path(const LogosAPI& logos_api) {
         // If Environment Variable is set, respect it
-        const auto envVarPath = qEnvironmentVariable(LOGOS_BLOCKCHAIN_CIRCUITS); // NOLINT: Move definition to if-statement
-        if (!envVarPath.isEmpty() && isCircuitsPathValid(envVarPath)) {
-            qInfo() << "LOGOS_BLOCKCHAIN_CIRCUITS is already set to a valid path:" << envVarPath;
+        const auto environment_variable_path =
+            qEnvironmentVariable(LOGOS_BLOCKCHAIN_CIRCUITS); // NOLINT: Move definition to if-statement
+        if (!environment_variable_path.isEmpty() && is_circuits_path_valid(environment_variable_path)) {
+            qInfo() << "LOGOS_BLOCKCHAIN_CIRCUITS is already set to a valid path:" << environment_variable_path;
             return;
         }
 
-        const QString modulePath = logosApi.property("modulePath").toString();
-        const QDir moduleDir(modulePath);
+        const QString module_path = logos_api.property("modulePath").toString();
+        const QDir module_directory(module_path);
 
         // Logos Core Edge-case
         // Due to Logos Core requiring the circuits' path to be `modulePath/lib/share/circuits`,
         // we add an ad-hoc check for this specific case.
-        const auto logosCorePath = moduleDir.filePath(QStringLiteral("share/circuits"));  // NOLINT: Move definition to if-statement
-        if (isCircuitsPathValid(logosCorePath)) {
-            qputenv(LOGOS_BLOCKCHAIN_CIRCUITS, logosCorePath.toUtf8());
-            qInfo() << "Detected Logos Core environment. LOGOS_BLOCKCHAIN_CIRCUITS set to:" << logosCorePath;
+        const auto logos_core_path =
+            module_directory.filePath(QStringLiteral("share/circuits")); // NOLINT: Move definition to if-statement
+        if (is_circuits_path_valid(logos_core_path)) {
+            qputenv(LOGOS_BLOCKCHAIN_CIRCUITS, logos_core_path.toUtf8());
+            qInfo() << "Detected Logos Core environment. LOGOS_BLOCKCHAIN_CIRCUITS set to:" << logos_core_path;
             return;
         }
 
         // Default
         // Our default build system, Nix, packages circuits in a sibling directory to `lib`,
         // which is where `modulePath` points to.
-        const auto defaultPath = moduleDir.filePath(QStringLiteral("../share/circuits"));
-        if (!isCircuitsPathValid(defaultPath)) {
-            qFatal() << "Could not find circuits in the default path (" + defaultPath + ")." << "Please set the"
+        const auto default_path = module_directory.filePath(QStringLiteral("../share/circuits"));
+        if (!is_circuits_path_valid(default_path)) {
+            qFatal() << "Could not find circuits in the default path (" + default_path + ")." << "Please set the"
                      << LOGOS_BLOCKCHAIN_CIRCUITS << "environment variable to a valid path containing the circuits.";
             return;
         }
 
-        qputenv(LOGOS_BLOCKCHAIN_CIRCUITS, defaultPath.toUtf8());
-        qInfo() << "Setting LOGOS_BLOCKCHAIN_CIRCUITS to the default path:" << defaultPath;
+        qputenv(LOGOS_BLOCKCHAIN_CIRCUITS, default_path.toUtf8());
+        qInfo() << "Setting LOGOS_BLOCKCHAIN_CIRCUITS to the default path:" << default_path;
     }
 } // namespace environment
 
@@ -274,7 +276,7 @@ int LogosBlockchainModule::start(const QString& config_path, const QString& depl
         return 2;
     }
 
-    environment::setupCircuitsPath(*logosAPI);
+    environment::setup_circuits_path(*logosAPI);
     QString effective_config_path = config_path;
 
     if (effective_config_path.isEmpty()) {
@@ -309,15 +311,15 @@ int LogosBlockchainModule::start(const QString& config_path, const QString& depl
 
     // Subscribe to block events
     if (!node) {
-        qWarning() << "Could not subcribe to block events: The node is not running.";
-        return 5;
+        qWarning() << "Could not subscribe to block events: The node is not running.";
+        return 4;
     }
 
     s_instance = this;
     const OperationStatus subscribe_status = subscribe_to_new_blocks(node, on_new_block_callback);
     if (!is_ok(&subscribe_status)) {
         qCritical() << "Failed to subscribe to new blocks. Error:" << subscribe_status;
-        return 4;
+        return 5;
     }
 
     return 0;
@@ -437,7 +439,9 @@ QString LogosBlockchainModule::wallet_transfer_funds(
     const QString& amount,
     const QString& optional_tip_hex
 ) {
-    return wallet_transfer_funds(change_public_key, QStringList{sender_address}, recipient_address, amount, optional_tip_hex);
+    return wallet_transfer_funds(
+        change_public_key, QStringList{sender_address}, recipient_address, amount, optional_tip_hex
+    );
 }
 
 QStringList LogosBlockchainModule::wallet_get_known_addresses() {
