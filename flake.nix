@@ -80,13 +80,6 @@
               "-DLOGOS_BLOCKCHAIN_INCLUDE=${logosBlockchainC}/include"
             ];
 
-            # Logos Core Edge-case
-            # The current version of the (bundler)[https://github.com/logos-co/nix-bundle-dir] does not support
-            # directories other than `lib/` and `bin/` for bundling.
-            # Since the circuits' binaries are placed in `share/circuits/`, we need to add a special case so the bundler
-            # can find them and include them in the final bundle.
-            extraDirs = [ "share" ];
-
             postInstall = ''
               mkdir $out/share
               cp -r ${logosBlockchainC}/circuits $out/share
