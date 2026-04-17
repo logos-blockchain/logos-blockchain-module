@@ -160,45 +160,18 @@ namespace environment {
         return directory.exists() && !directory.entryList(QDir::Files | QDir::NoDotAndDotDot).isEmpty();
     }
 
-    // Sets up the LOGOS_BLOCKCHAIN_CIRCUITS environment variable
-    // This has two side effects:
-    // - Modifies the environment variable LOGOS_BLOCKCHAIN_CIRCUITS.
-    // - Terminates the program if no valid circuits directory is found.
     void setup_circuits_path(const LogosAPI& logos_api) {
-        // If Environment Variable is set, respect it
-        const auto environment_variable_path =
-            qEnvironmentVariable(LOGOS_BLOCKCHAIN_CIRCUITS); // NOLINT: Move definition to if-statement
-        if (!environment_variable_path.isEmpty() && is_circuits_path_valid(environment_variable_path)) {
-            qInfo() << "LOGOS_BLOCKCHAIN_CIRCUITS is already set to a valid path:" << environment_variable_path;
-            return;
-        }
-
         const QString module_path = logos_api.property("modulePath").toString();
         const QDir module_directory(module_path);
 
-        // Logos Core Edge-case
-        // Due to Logos Core requiring the circuits' path to be `modulePath/lib/share/circuits`,
-        // we add an ad-hoc check for this specific case.
-        const auto logos_core_path =
-            module_directory.filePath(QStringLiteral("share/circuits")); // NOLINT: Move definition to if-statement
-        if (is_circuits_path_valid(logos_core_path)) {
-            qputenv(LOGOS_BLOCKCHAIN_CIRCUITS, logos_core_path.toUtf8());
-            qInfo() << "Detected Logos Core environment. LOGOS_BLOCKCHAIN_CIRCUITS set to:" << logos_core_path;
+        const QString circuits_path = module_directory.filePath(QStringLiteral("circuits"));
+        if (!is_circuits_path_valid(circuits_path)) {
+            qFatal() << "The LOGOS_BLOCKCHAIN_CIRCUITS environment variable is not set or does not contain any files.";
             return;
         }
 
-        // Default
-        // Our default build system, Nix, packages circuits in a sibling directory to `lib`,
-        // which is where `modulePath` points to.
-        const auto default_path = module_directory.filePath(QStringLiteral("../share/circuits"));
-        if (!is_circuits_path_valid(default_path)) {
-            qFatal() << "Could not find circuits in the default path (" + default_path + ")." << "Please set the"
-                     << LOGOS_BLOCKCHAIN_CIRCUITS << "environment variable to a valid path containing the circuits.";
-            return;
-        }
-
-        qputenv(LOGOS_BLOCKCHAIN_CIRCUITS, default_path.toUtf8());
-        qInfo() << "Setting LOGOS_BLOCKCHAIN_CIRCUITS to the default path:" << default_path;
+        qputenv("LOGOS_BLOCKCHAIN_CIRCUITS", circuits_path.toUtf8());
+        qInfo() << "LOGOS_BLOCKCHAIN_CIRCUITS set to:" << circuits_path;
     }
 } // namespace environment
 
@@ -210,7 +183,7 @@ void LogosBlockchainModule::on_new_block_callback(const char* block) {
         s_instance->emit_event("newBlock", data);
         // SAFETY:
         // We are getting an owned pointer here which is freed after this callback is called, so there is not need to
-        // free the resrouce here as we are copying the data!
+        // free the resource here as we are copying the data!
     }
 }
 
