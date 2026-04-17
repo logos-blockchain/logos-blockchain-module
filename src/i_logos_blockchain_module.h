@@ -11,11 +11,15 @@ public:
     // Logos Core
     virtual void initLogos(LogosAPI* logosAPIInstance) = 0;
 
-    // Node
+    // ---- Node ----
+
+    // Lifecycle
     virtual int generate_user_config(const QVariantMap& args) = 0;
     virtual int generate_user_config_from_str(const QString& args) = 0;
     virtual int start(const QString& config_path, const QString& deployment) = 0;
     virtual int stop() = 0;
+
+    // Wallet
     virtual QString wallet_get_balance(const QString& addressHex) = 0;
     virtual QString wallet_transfer_funds(
         const QString& changePublicKey,
@@ -25,6 +29,8 @@ public:
         const QString& optionalTipHex
     ) = 0;
     virtual QStringList wallet_get_known_addresses() = 0;
+
+    // Blend
     virtual QString blend_join_as_core_node(
         const QString& providerIdHex,
         const QString& zkIdHex,
@@ -32,10 +38,12 @@ public:
         const QStringList& locators
     ) = 0;
 
-    // Explorer
+    // Storage
     virtual QString get_block(const QString& headerIdHex) = 0;
     virtual QString get_blocks(quint64 fromSlot, quint64 toSlot) = 0;
     virtual QString get_transaction(const QString& txHashHex) = 0;
+
+    // Cryptarchia
     virtual QString get_cryptarchia_info() = 0;
 };
 

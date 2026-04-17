@@ -25,11 +25,15 @@ public:
     [[nodiscard]] QString version() const override;
     Q_INVOKABLE void initLogos(LogosAPI*) override;
 
-    // Logos Blockchain
+    // ---- Node ----
+
+    // Lifecycle
     Q_INVOKABLE int generate_user_config(const QVariantMap& args) override;
     Q_INVOKABLE int generate_user_config_from_str(const QString& args) override;
     Q_INVOKABLE int start(const QString& config_path, const QString& deployment) override;
     Q_INVOKABLE int stop() override;
+
+    // Wallet
     Q_INVOKABLE QString wallet_get_balance(const QString& addressHex) override;
     Q_INVOKABLE QString wallet_transfer_funds(
         const QString& changePublicKey,
@@ -46,6 +50,8 @@ public:
         const QString& optionalTipHex
     );
     Q_INVOKABLE QStringList wallet_get_known_addresses() override;
+
+    // Blend
     Q_INVOKABLE QString blend_join_as_core_node(
         const QString& providerIdHex,
         const QString& zkIdHex,
@@ -53,10 +59,12 @@ public:
         const QStringList& locators
     ) override;
 
-    // Explorer
+    // Storage
     Q_INVOKABLE QString get_block(const QString& headerIdHex) override;
     Q_INVOKABLE QString get_blocks(quint64 fromSlot, quint64 toSlot) override;
     Q_INVOKABLE QString get_transaction(const QString& txHashHex) override;
+
+    // Cryptarchia
     Q_INVOKABLE QString get_cryptarchia_info() override;
 
 signals:
