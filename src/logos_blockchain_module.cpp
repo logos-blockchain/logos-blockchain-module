@@ -264,33 +264,29 @@ QStringList LogosBlockchainModule::wallet_get_known_addresses() {
     return out;
 }
 
-int LogosBlockchainModule::blend_join_as_core_node(
+QString LogosBlockchainModule::blend_join_as_core_node(
     const QString& providerIdHex,
     const QString& zkIdHex,
     const QString& lockedNoteIdHex,
     const QStringList& locators
 ) {
     if (!node) {
-        qWarning() << "Could not execute the operation: The node is not running.";
-        return 1;
+        return QStringLiteral("Error: The node is not running.");
     }
 
     const QByteArray providerIdBytes = parseAddressHex(providerIdHex);
     if (providerIdBytes.isEmpty() || providerIdBytes.size() != kAddressBytes) {
-        qCritical() << "blend_join_as_core_node: Invalid providerId (64 hex characters required).";
-        return 2;
+        return QStringLiteral("Error: Invalid providerId (64 hex characters required).");
     }
 
     const QByteArray zkIdBytes = parseAddressHex(zkIdHex);
     if (zkIdBytes.isEmpty() || zkIdBytes.size() != kAddressBytes) {
-        qCritical() << "blend_join_as_core_node: Invalid zkId (64 hex characters required).";
-        return 3;
+        return QStringLiteral("Error: Invalid zkId (64 hex characters required).");
     }
 
     const QByteArray lockedNoteIdBytes = parseAddressHex(lockedNoteIdHex);
     if (lockedNoteIdBytes.isEmpty() || lockedNoteIdBytes.size() != kAddressBytes) {
-        qCritical() << "blend_join_as_core_node: Invalid lockedNoteId (64 hex characters required).";
-        return 4;
+        return QStringLiteral("Error: Invalid lockedNoteId (64 hex characters required).");
     }
 
     // QString is UTF-16, but the FFI requires UTF-8.
@@ -315,12 +311,12 @@ int LogosBlockchainModule::blend_join_as_core_node(
     );
     if (!is_ok(&error)) {
         qCritical() << "Failed to join as core node. Error:" << error;
-        return 5;
+        return QStringLiteral("Error: Failed to join as core node: ") + QString::number(error);
     }
 
     const QByteArray declarationIdBytes(reinterpret_cast<const char*>(&value), sizeof(value));
     qInfo() << "Successfully joined as core node. DeclarationId:" << declarationIdBytes.toHex();
-    return 0;
+    return QString::fromUtf8(declarationIdBytes.toHex());
 }
 
 QString LogosBlockchainModule::get_block(const QString& headerIdHex) {
