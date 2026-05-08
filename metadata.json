@@ -4,6 +4,10 @@
   "description": "Logos blockchain node for logos-core",
   "author": "Logos Blockchain Team",
   "type": "core",
+  "interface": "universal",
+  "codegen": {
+    "impl_header": "logos_blockchain_module.h"
+  },
   "category": "blockchain",
   "main": "liblogos_blockchain_module_plugin",
   "dependencies": [],
@@ -20,8 +24,8 @@
 
   "nix": {
     "packages": {
-      "build": [],
-      "runtime": []
+      "build": ["boost"],
+      "runtime": ["nlohmann_json"]
     },
     "external_libraries": [
       { "name": "logos_blockchain" }
