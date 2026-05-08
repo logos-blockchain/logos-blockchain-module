@@ -24,8 +24,8 @@
 
   "nix": {
     "packages": {
-      "build": ["boost"],
-      "runtime": ["nlohmann_json"]
+      "build": [],
+      "runtime": ["nlohmann_json", "boost"]
     },
     "external_libraries": [
       { "name": "logos_blockchain" }
