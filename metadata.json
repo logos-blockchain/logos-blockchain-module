@@ -6,7 +6,8 @@
   "type": "core",
   "interface": "universal",
   "codegen": {
-    "impl_header": "logos_blockchain_module.h"
+    "impl_header": "logos_blockchain_module.h",
+    "impl_class": "LogosBlockchainModule"
   },
   "category": "blockchain",
   "main": "liblogos_blockchain_module_plugin",
