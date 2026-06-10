@@ -21,15 +21,18 @@
         mockCLibs = [ "logos_blockchain" ];
       };
 
-      preConfigure = { externalLibs }: ''
-        if [ -d "${externalLibs.logos_blockchain}/circuits" ]; then
-          echo "Staging zk circuits from logos-blockchain..."
-          cp -r "${externalLibs.logos_blockchain}/circuits" ./circuits
-          chmod -R u+w ./circuits
-        else
-          echo "WARNING: no circuits/ found in logos-blockchain derivation"
-        fi
-      '';
+      preConfigure = { externalLibs }:
+        if externalLibs ? logos_blockchain then ''
+          if [ -d "${externalLibs.logos_blockchain}/circuits" ]; then
+            echo "Staging zk circuits from logos-blockchain..."
+            cp -r "${externalLibs.logos_blockchain}/circuits" ./circuits
+            chmod -R u+w ./circuits
+          else
+            echo "WARNING: no circuits/ found in logos-blockchain derivation"
+          fi
+        '' else ''
+          echo "Skipping zk circuits staging (logos_blockchain mocked for tests)"
+        '';
 
       # Logos Core Edge-case
       # The current version of Logos Core expects circuits' binaries under `lib/circuits/`.
