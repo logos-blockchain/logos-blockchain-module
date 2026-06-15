@@ -70,6 +70,17 @@ typedef struct {
     size_t len;
 } KnownAddresses;
 
+typedef struct {
+    Hash commitment;
+    Hash nullifier;
+} ClaimableVoucher;
+
+typedef struct {
+    HeaderId tip;
+    ClaimableVoucher* vouchers;
+    size_t len;
+} ClaimableVouchers;
+
 // Cryptarchia consensus info
 typedef struct {
     uint8_t lib[32];
@@ -85,6 +96,7 @@ typedef struct { uint64_t value; OperationStatus error; } BalanceResult;
 typedef struct { Hash value; OperationStatus error; } TransferHashResult;
 typedef struct { TxHash value; OperationStatus error; } FfiLeaderClaimResult;
 typedef struct { KnownAddresses value; OperationStatus error; } KnownAddressesResult;
+typedef struct { ClaimableVouchers value; OperationStatus error; } FfiClaimableVouchersResult;
 typedef struct { Hash value; OperationStatus error; } BlendHashResult;
 typedef struct { char* value; OperationStatus error; } StringResult;
 typedef struct { CryptarchiaInfo* value; OperationStatus error; } CryptarchiaInfoResult;
@@ -140,6 +152,8 @@ TransferHashResult transfer_funds(LogosBlockchainNode* node, const TransferFunds
 FfiLeaderClaimResult leader_claim(LogosBlockchainNode* node);
 KnownAddressesResult get_known_addresses(LogosBlockchainNode* node);
 OperationStatus free_known_addresses(KnownAddresses addrs);
+FfiClaimableVouchersResult get_claimable_vouchers(LogosBlockchainNode* node, const HeaderId* optional_tip);
+OperationStatus free_claimable_vouchers(ClaimableVouchers vouchers);
 
 // Blend
 BlendHashResult blend_join_as_core_node(

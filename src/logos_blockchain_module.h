@@ -76,6 +76,7 @@ public:
     );
     std::vector<std::string> wallet_get_known_addresses();
     std::string leader_claim();
+    std::string wallet_get_claimable_vouchers();
 
     // Blend
     std::string blend_join_as_core_node(
