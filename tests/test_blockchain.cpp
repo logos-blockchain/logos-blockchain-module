@@ -113,9 +113,10 @@ LOGOS_TEST(generate_user_config_with_all_fields) {
         "blend_port": 9001,
         "http_addr": "0.0.0.0:8080",
         "external_address": "1.2.3.4",
-        "no_public_ip_check": true,
-        "deployment": { "well_known_deployment": "devnet" },
-        "state_path": "/tmp/state"
+        "state_path": "/tmp/state",
+        "ibd": true,
+        "log_filter": "warn,logos_blockchain=debug",
+        "kms_file": "/tmp/kms.yaml"
     })";
 
     LOGOS_ASSERT_EQ(module.generate_user_config(args), 0);

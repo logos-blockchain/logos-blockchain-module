@@ -82,10 +82,10 @@ namespace {
         uint16_t blend_port_val;
         std::string http_addr_data;
         std::string external_address_data;
-        bool no_public_ip_check_val;
-        std::string custom_deployment_config_path_data;
-        Deployment deployment_val{};
         std::string state_path_data;
+        bool ibd_val;
+        std::string log_filter_data;
+        std::string kms_file_data;
 
         // The FFI struct with pointers into owned data
         GenerateConfigArgs ffi_args{};
@@ -150,45 +150,36 @@ namespace {
                 ffi_args.external_address = nullptr;
             }
 
-            // no_public_ip_check (bool -> const bool*)
-            if (args.contains("no_public_ip_check") && args["no_public_ip_check"].is_boolean()) {
-                no_public_ip_check_val = args["no_public_ip_check"].get<bool>();
-                ffi_args.no_public_ip_check = &no_public_ip_check_val;
-            } else {
-                ffi_args.no_public_ip_check = nullptr;
-            }
-
-            // deployment (const struct Deployment*)
-            // Expected format: { "deployment": { "well_known_deployment": "devnet" } }
-            //              OR: { "deployment": { "config_path": "/path/to/config" } }
-            if (args.contains("deployment") && args["deployment"].is_object()) {
-                const auto& deployment = args["deployment"];
-
-                if (deployment.contains("well_known_deployment") && deployment["well_known_deployment"].is_string()) {
-                    deployment_val.deployment_type = DeploymentType::WellKnown;
-                    const std::string wellknown = deployment["well_known_deployment"].get<std::string>();
-                    if (wellknown == "devnet") {
-                        deployment_val.well_known_deployment = WellKnownDeployment::Devnet;
-                    }
-                    deployment_val.custom_deployment_config_path = nullptr;
-                } else if (deployment.contains("config_path") && deployment["config_path"].is_string()) {
-                    deployment_val.deployment_type = DeploymentType::Custom;
-                    deployment_val.well_known_deployment = static_cast<WellKnownDeployment>(0);
-                    custom_deployment_config_path_data = deployment["config_path"].get<std::string>();
-                    deployment_val.custom_deployment_config_path = custom_deployment_config_path_data.c_str();
-                }
-
-                ffi_args.deployment = &deployment_val;
-            } else {
-                ffi_args.deployment = nullptr;
-            }
-
             // state_path (string -> const char*)
             if (args.contains("state_path") && args["state_path"].is_string()) {
                 state_path_data = args["state_path"].get<std::string>();
                 ffi_args.state_path = state_path_data.c_str();
             } else {
                 ffi_args.state_path = nullptr;
+            }
+
+            // ibd (bool -> const bool*)
+            if (args.contains("ibd") && args["ibd"].is_boolean()) {
+                ibd_val = args["ibd"].get<bool>();
+                ffi_args.ibd = &ibd_val;
+            } else {
+                ffi_args.ibd = nullptr;
+            }
+
+            // log_filter (string -> const char*)
+            if (args.contains("log_filter") && args["log_filter"].is_string()) {
+                log_filter_data = args["log_filter"].get<std::string>();
+                ffi_args.log_filter = log_filter_data.c_str();
+            } else {
+                ffi_args.log_filter = nullptr;
+            }
+
+            // kms_file (string -> const char*)
+            if (args.contains("kms_file") && args["kms_file"].is_string()) {
+                kms_file_data = args["kms_file"].get<std::string>();
+                ffi_args.kms_file = kms_file_data.c_str();
+            } else {
+                ffi_args.kms_file = nullptr;
             }
         }
     };
