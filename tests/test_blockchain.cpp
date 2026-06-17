@@ -59,8 +59,8 @@ static LogosBlockchainModule* createStartedModule(LogosTestContext& t, TempDir& 
     t.mockCFunction("start_lb_node").returns(1);
     t.mockCFunction("subscribe_to_new_blocks").returns(0);
 
-    int rc = module->start(tmpDir.filePath("config.json"), "");
-    if (rc != 0) {
+    std::string rc = module->start(tmpDir.filePath("config.json"), "");
+    if (rc != "0") {
         delete module;
         return nullptr;
     }
@@ -77,7 +77,7 @@ LOGOS_TEST(generate_user_config_returns_0_on_success) {
 
     t.mockCFunction("generate_user_config").returns(0);
 
-    LOGOS_ASSERT_EQ(module.generate_user_config(R"({"output":"/tmp/test-config.json"})"), 0);
+    LOGOS_ASSERT_EQ(module.generate_user_config(R"({"output":"/tmp/test-config.json"})"), std::string("0"));
     LOGOS_ASSERT(t.cFunctionCalled("generate_user_config"));
 }
 
@@ -87,7 +87,7 @@ LOGOS_TEST(generate_user_config_returns_1_on_failure) {
 
     t.mockCFunction("generate_user_config").returns(1);
 
-    LOGOS_ASSERT_EQ(module.generate_user_config("{}"), 1);
+    LOGOS_ASSERT_EQ(module.generate_user_config("{}"), std::string("1"));
 }
 
 LOGOS_TEST(generate_user_config_from_json_string) {
@@ -96,7 +96,7 @@ LOGOS_TEST(generate_user_config_from_json_string) {
 
     t.mockCFunction("generate_user_config").returns(0);
 
-    LOGOS_ASSERT_EQ(module.generate_user_config(R"({"output":"/tmp/out.json"})"), 0);
+    LOGOS_ASSERT_EQ(module.generate_user_config(R"({"output":"/tmp/out.json"})"), std::string("0"));
     LOGOS_ASSERT(t.cFunctionCalled("generate_user_config"));
 }
 
@@ -113,12 +113,13 @@ LOGOS_TEST(generate_user_config_with_all_fields) {
         "blend_port": 9001,
         "http_addr": "0.0.0.0:8080",
         "external_address": "1.2.3.4",
-        "no_public_ip_check": true,
-        "deployment": { "well_known_deployment": "devnet" },
-        "state_path": "/tmp/state"
+        "state_path": "/tmp/state",
+        "ibd": true,
+        "log_filter": "warn,logos_blockchain=debug",
+        "kms_file": "/tmp/kms.yaml"
     })";
 
-    LOGOS_ASSERT_EQ(module.generate_user_config(args), 0);
+    LOGOS_ASSERT_EQ(module.generate_user_config(args), std::string("0"));
 }
 
 // ============================================================================
@@ -128,7 +129,7 @@ LOGOS_TEST(generate_user_config_with_all_fields) {
 LOGOS_TEST(stop_without_node_returns_1) {
     auto t = LogosTestContext("blockchain_module");
     LogosBlockchainModule module;
-    LOGOS_ASSERT_EQ(module.stop(), 1);
+    LOGOS_ASSERT_EQ(module.stop(), std::string("1"));
 }
 
 LOGOS_TEST(wallet_get_balance_without_node_returns_error) {
@@ -240,7 +241,7 @@ LOGOS_TEST(start_returns_1_when_already_running) {
     auto* module = createStartedModule(t, tmpDir);
     LOGOS_ASSERT_TRUE(module != nullptr);
 
-    LOGOS_ASSERT_EQ(module->start("/tmp/config.json", ""), 1);
+    LOGOS_ASSERT_EQ(module->start("/tmp/config.json", ""), std::string("1"));
     delete module;
 }
 
@@ -250,7 +251,7 @@ LOGOS_TEST(stop_succeeds_with_running_node) {
     auto* module = createStartedModule(t, tmpDir);
     LOGOS_ASSERT_TRUE(module != nullptr);
 
-    LOGOS_ASSERT_EQ(module->stop(), 0);
+    LOGOS_ASSERT_EQ(module->stop(), std::string("0"));
     LOGOS_ASSERT(t.cFunctionCalled("stop_node"));
     delete module;
 }
@@ -1062,7 +1063,7 @@ LOGOS_TEST(update_user_config_returns_0_on_success) {
 
     t.mockCFunction("update_user_config").returns(0);
 
-    LOGOS_ASSERT_EQ(module.update_user_config("/tmp/config.yaml", "/tmp/keystore.yaml"), 0);
+    LOGOS_ASSERT_EQ(module.update_user_config("/tmp/config.yaml", "/tmp/keystore.yaml"), std::string("0"));
     LOGOS_ASSERT(t.cFunctionCalled("update_user_config"));
 }
 
@@ -1072,7 +1073,7 @@ LOGOS_TEST(update_user_config_returns_1_on_failure) {
 
     t.mockCFunction("update_user_config").returns(1);
 
-    LOGOS_ASSERT_EQ(module.update_user_config("/tmp/config.yaml", "/tmp/keystore.yaml"), 1);
+    LOGOS_ASSERT_EQ(module.update_user_config("/tmp/config.yaml", "/tmp/keystore.yaml"), std::string("1"));
 }
 
 LOGOS_TEST(migrate_user_config_returns_0_on_success) {
@@ -1081,7 +1082,7 @@ LOGOS_TEST(migrate_user_config_returns_0_on_success) {
 
     t.mockCFunction("migrate_user_config").returns(0);
 
-    LOGOS_ASSERT_EQ(module.migrate_user_config("/tmp/out.yaml", "/tmp/keystore.yaml"), 0);
+    LOGOS_ASSERT_EQ(module.migrate_user_config("/tmp/out.yaml", "/tmp/keystore.yaml"), std::string("0"));
     LOGOS_ASSERT(t.cFunctionCalled("migrate_user_config"));
 }
 
@@ -1091,7 +1092,7 @@ LOGOS_TEST(migrate_user_config_returns_1_on_failure) {
 
     t.mockCFunction("migrate_user_config").returns(1);
 
-    LOGOS_ASSERT_EQ(module.migrate_user_config("/tmp/out.yaml", "/tmp/keystore.yaml"), 1);
+    LOGOS_ASSERT_EQ(module.migrate_user_config("/tmp/out.yaml", "/tmp/keystore.yaml"), std::string("1"));
 }
 
 LOGOS_TEST(migrate_user_config_0_1_2_returns_0_on_success) {
@@ -1100,7 +1101,7 @@ LOGOS_TEST(migrate_user_config_0_1_2_returns_0_on_success) {
 
     t.mockCFunction("migrate_user_config_0_1_2").returns(0);
 
-    LOGOS_ASSERT_EQ(module.migrate_user_config_0_1_2("/tmp/new.yaml", "/tmp/old.yaml", "/tmp/keystore.yaml"), 0);
+    LOGOS_ASSERT_EQ(module.migrate_user_config_0_1_2("/tmp/new.yaml", "/tmp/old.yaml", "/tmp/keystore.yaml"), std::string("0"));
     LOGOS_ASSERT(t.cFunctionCalled("migrate_user_config_0_1_2"));
 }
 
@@ -1110,7 +1111,7 @@ LOGOS_TEST(migrate_user_config_0_1_2_returns_1_on_failure) {
 
     t.mockCFunction("migrate_user_config_0_1_2").returns(1);
 
-    LOGOS_ASSERT_EQ(module.migrate_user_config_0_1_2("/tmp/new.yaml", "/tmp/old.yaml", "/tmp/keystore.yaml"), 1);
+    LOGOS_ASSERT_EQ(module.migrate_user_config_0_1_2("/tmp/new.yaml", "/tmp/old.yaml", "/tmp/keystore.yaml"), std::string("1"));
 }
 
 LOGOS_TEST(participate_returns_0_on_success) {
@@ -1119,7 +1120,7 @@ LOGOS_TEST(participate_returns_0_on_success) {
 
     t.mockCFunction("participate").returns(0);
 
-    LOGOS_ASSERT_EQ(module.participate("/tmp/config.yaml", "/tmp/keystore.yaml", "/tmp/out", ""), 0);
+    LOGOS_ASSERT_EQ(module.participate("/tmp/config.yaml", "/tmp/keystore.yaml", "/tmp/out", ""), std::string("0"));
     LOGOS_ASSERT(t.cFunctionCalled("participate"));
 }
 
@@ -1129,7 +1130,7 @@ LOGOS_TEST(participate_returns_1_on_failure) {
 
     t.mockCFunction("participate").returns(1);
 
-    LOGOS_ASSERT_EQ(module.participate("/tmp/config.yaml", "/tmp/keystore.yaml", "/tmp/out", "1.2.3.4"), 1);
+    LOGOS_ASSERT_EQ(module.participate("/tmp/config.yaml", "/tmp/keystore.yaml", "/tmp/out", "1.2.3.4"), std::string("1"));
 }
 
 // ============================================================================
@@ -1186,7 +1187,7 @@ LOGOS_TEST(add_key_returns_0_on_success) {
 
     t.mockCFunction("add_key").returns(0);
 
-    LOGOS_ASSERT_EQ(module.add_key("/tmp/config.yaml", "/tmp/keystore.yaml", "ed25519", VALID_HEX, ""), 0);
+    LOGOS_ASSERT_EQ(module.add_key("/tmp/config.yaml", "/tmp/keystore.yaml", "ed25519", VALID_HEX, ""), std::string("0"));
     LOGOS_ASSERT(t.cFunctionCalled("add_key"));
 }
 
@@ -1194,7 +1195,7 @@ LOGOS_TEST(add_key_rejects_invalid_key_type) {
     auto t = LogosTestContext("blockchain_module");
     LogosBlockchainModule module;
 
-    LOGOS_ASSERT_EQ(module.add_key("/tmp/config.yaml", "/tmp/keystore.yaml", "bogus", VALID_HEX, ""), 1);
+    LOGOS_ASSERT_EQ(module.add_key("/tmp/config.yaml", "/tmp/keystore.yaml", "bogus", VALID_HEX, ""), std::string("1"));
     LOGOS_ASSERT_FALSE(t.cFunctionCalled("add_key"));
 }
 
@@ -1204,7 +1205,7 @@ LOGOS_TEST(add_key_returns_1_on_failure) {
 
     t.mockCFunction("add_key").returns(1);
 
-    LOGOS_ASSERT_EQ(module.add_key("/tmp/config.yaml", "/tmp/keystore.yaml", "zk", VALID_HEX, "title"), 1);
+    LOGOS_ASSERT_EQ(module.add_key("/tmp/config.yaml", "/tmp/keystore.yaml", "zk", VALID_HEX, "title"), std::string("1"));
 }
 
 LOGOS_TEST(remove_key_returns_0_on_success) {
@@ -1213,7 +1214,7 @@ LOGOS_TEST(remove_key_returns_0_on_success) {
 
     t.mockCFunction("remove_key").returns(0);
 
-    LOGOS_ASSERT_EQ(module.remove_key("/tmp/config.yaml", "/tmp/keystore.yaml", "my-key"), 0);
+    LOGOS_ASSERT_EQ(module.remove_key("/tmp/config.yaml", "/tmp/keystore.yaml", "my-key"), std::string("0"));
     LOGOS_ASSERT(t.cFunctionCalled("remove_key"));
 }
 
@@ -1223,7 +1224,7 @@ LOGOS_TEST(remove_key_returns_1_on_failure) {
 
     t.mockCFunction("remove_key").returns(1);
 
-    LOGOS_ASSERT_EQ(module.remove_key("/tmp/config.yaml", "/tmp/keystore.yaml", "my-key"), 1);
+    LOGOS_ASSERT_EQ(module.remove_key("/tmp/config.yaml", "/tmp/keystore.yaml", "my-key"), std::string("1"));
 }
 
 // ============================================================================
