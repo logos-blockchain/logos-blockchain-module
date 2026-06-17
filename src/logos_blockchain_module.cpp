@@ -663,12 +663,12 @@ std::string LogosBlockchainModule::wallet_get_notes(
     }
 
     json obj;
-    obj["tip"] = bytes_to_hex(reinterpret_cast<const uint8_t*>(value.tip), ADDRESS_BYTES);
+    obj["tip"] = bytes_to_hex(reinterpret_cast<const uint8_t*>(value.tip), TX_HASH_BYTES);
     json notes = json::array();
     for (size_t i = 0; i < value.len; ++i) {
         const WalletNote& note = value.notes[i];
         json n;
-        n["id"] = bytes_to_hex(reinterpret_cast<const uint8_t*>(note.id), ADDRESS_BYTES);
+        n["id"] = bytes_to_hex(reinterpret_cast<const uint8_t*>(note.id), TX_HASH_BYTES);
         // Value is u64; serialized as a string to avoid JSON number precision loss.
         n["value"] = std::to_string(note.value);
         notes.push_back(std::move(n));
