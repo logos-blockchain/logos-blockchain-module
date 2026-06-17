@@ -17,6 +17,10 @@ rebuild: clean build
 nix:
     nix develop
 
+# Launch CLion inside the Nix dev shell so it inherits required variables and fully integrates with Nix.
+clion:
+    nix develop -c "$HOME/.local/share/JetBrains/Toolbox/apps/clion/bin/clion.sh" . >/dev/null 2>&1 &
+
 prettify:
     nix shell nixpkgs#clang-tools -c clang-format -i src/**.cpp src/**.h
 
