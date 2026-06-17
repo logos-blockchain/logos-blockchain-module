@@ -59,8 +59,8 @@ static LogosBlockchainModule* createStartedModule(LogosTestContext& t, TempDir& 
     t.mockCFunction("start_lb_node").returns(1);
     t.mockCFunction("subscribe_to_new_blocks").returns(0);
 
-    int rc = module->start(tmpDir.filePath("config.json"), "");
-    if (rc != 0) {
+    std::string rc = module->start(tmpDir.filePath("config.json"), "");
+    if (rc != "0") {
         delete module;
         return nullptr;
     }
