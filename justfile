@@ -4,7 +4,7 @@ default: build
 # provides LOGOS_CPP_SDK_ROOT and LOGOS_MODULE_BUILDER_ROOT — CMake picks them
 # up automatically via the logos_module() macro, no explicit -D flags needed.
 configure:
-    cmake -S . -B build -G Ninja
+    cmake -S . -B build -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 build: configure
     cmake --build build --parallel --target liblogos_blockchain_module_module_plugin
@@ -23,6 +23,14 @@ clion:
 
 prettify:
     nix shell nixpkgs#clang-tools -c clang-format -i src/**.cpp src/**.h
+
+lint: configure
+    nix shell nixpkgs#clang-tools --command clang-tidy \
+        -p build \
+        --header-filter='src/.*' \
+        --extra-arg-before=--driver-mode=g++ \
+        --extra-arg=-I"$LOGOS_EXT_ROOT_LOGOS_BLOCKCHAIN/include" \
+        src/logos_blockchain_module.cpp
 
 unicode-logs file:
     perl -pe 's/\\u([0-9A-Fa-f]{4})/chr(hex($1))/ge' {{file}} | less -R
