@@ -2,8 +2,10 @@
   description = "Logos Blockchain Module - Qt6 Plugin";
 
   inputs = {
-    logos-module-builder.url = "github:logos-co/logos-module-builder?ref=bc868bf47f9d797637ac78af814b0db718dde4b8";
-    # v0.1.3-rc.10-compatible + rust-rapidsnark nix fixes + cli commands + leader_claim + channel deposit / wallet notes C bindings
+    # TEMP: pinned to the dev-shell external-lib-paths fix branch (LOGOS_EXT_ROOT_<NAME>).
+        # Revert to "github:logos-co/logos-module-builder" once that branch merges to master.
+        logos-module-builder.url = "github:logos-co/logos-module-builder?ref=fix/dev-shell-external-lib-paths";
+    # v0.1.3-rc.10-compatible + rust-rapidsnark nix fixes + cli commands + leader_claim + channel deposit / wallet notes C bindings + config generation fixes
     logos-blockchain.url = "github:logos-blockchain/logos-blockchain?ref=0222706b14010fbdfbe9a94d3617ebf46a77fdd1";
   };
 
