@@ -23,9 +23,10 @@ namespace result {
         return {true};
     }
 
-    template <typename T> StdLogosResult ok(T value) {
+    template <typename T>
+    StdLogosResult ok(T value) { // NOLINT(performance-unnecessary-value-param)
         return {true, std::move(value)};
-    } // NOLINT(performance-unnecessary-value-param)
+    }
 
     StdLogosResult err(std::string message) {
         return {false, {}, std::move(message)};
@@ -686,14 +687,14 @@ StdLogosResult LogosBlockchainModule::wallet_get_notes(
     }
 
     json obj;
-    obj["tip"] = bytes_to_hex(reinterpret_cast<const uint8_t*>(value.tip), TX_HASH_BYTES);
+    obj["tip"] = bytes_to_hex(value.tip, TX_HASH_BYTES);
     json notes = json::array();
     for (size_t i = 0; i < value.len; ++i) {
-        const WalletNote& note = value.notes[i];
+        const auto&[note_id, note_value] = value.notes[i];
         json n;
-        n["id"] = bytes_to_hex(reinterpret_cast<const uint8_t*>(note.id), TX_HASH_BYTES);
+        n["id"] = bytes_to_hex(note_id, TX_HASH_BYTES);
         // Value is u64; serialized as a string to avoid JSON number precision loss.
-        n["value"] = std::to_string(note.value);
+        n["value"] = std::to_string(note_value);
         notes.push_back(std::move(n));
     }
     obj["notes"] = std::move(notes);
@@ -893,10 +894,10 @@ StdLogosResult LogosBlockchainModule::wallet_get_claimable_vouchers() const {
     obj["vouchers"] = json::array();
 
     for (size_t i = 0; i < value.len; ++i) {
-        const ClaimableVoucher& voucher = value.vouchers[i];
+        const auto&[commitment, nullifier] = value.vouchers[i];
         obj["vouchers"].push_back({
-            {"commitment", bytes_to_hex(reinterpret_cast<const uint8_t*>(&voucher.commitment), ADDRESS_BYTES)},
-            {"nullifier", bytes_to_hex(reinterpret_cast<const uint8_t*>(&voucher.nullifier), ADDRESS_BYTES)},
+            {"commitment", bytes_to_hex(reinterpret_cast<const uint8_t*>(&commitment), ADDRESS_BYTES)},
+            {"nullifier", bytes_to_hex(reinterpret_cast<const uint8_t*>(&nullifier), ADDRESS_BYTES)},
         });
     }
 
