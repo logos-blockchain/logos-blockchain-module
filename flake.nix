@@ -2,8 +2,9 @@
   description = "Logos Blockchain Module - Qt6 Plugin";
 
   inputs = {
-    logos-module-builder.url = "github:logos-co/logos-module-builder";
-    logos-blockchain.url = "github:logos-blockchain/logos-blockchain?rev=93b44bd9ff277546df240ca857a20003da953409"; # claimable vouchers C binding
+    logos-module-builder.url = "github:logos-co/logos-module-builder?ref=bc868bf47f9d797637ac78af814b0db718dde4b8";
+    # v0.1.3-rc.10-compatible + rust-rapidsnark nix fixes + cli commands + leader_claim C binding + config generation fixes
+    logos-blockchain.url = "github:logos-blockchain/logos-blockchain?ref=3dc81b4ec49ba977220f3ff432885258265aa986";
   };
 
   outputs = inputs@{ logos-module-builder, ... }:
