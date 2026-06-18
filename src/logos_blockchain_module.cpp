@@ -690,7 +690,7 @@ StdLogosResult LogosBlockchainModule::wallet_get_notes(
     obj["tip"] = bytes_to_hex(value.tip, TX_HASH_BYTES);
     json notes = json::array();
     for (size_t i = 0; i < value.len; ++i) {
-        const auto&[note_id, note_value] = value.notes[i];
+        const auto& [note_id, note_value] = value.notes[i];
         json n;
         n["id"] = bytes_to_hex(note_id, TX_HASH_BYTES);
         // Value is u64; serialized as a string to avoid JSON number precision loss.
@@ -894,7 +894,7 @@ StdLogosResult LogosBlockchainModule::wallet_get_claimable_vouchers() const {
     obj["vouchers"] = json::array();
 
     for (size_t i = 0; i < value.len; ++i) {
-        const auto&[commitment, nullifier] = value.vouchers[i];
+        const auto& [commitment, nullifier] = value.vouchers[i];
         obj["vouchers"].push_back({
             {"commitment", bytes_to_hex(reinterpret_cast<const uint8_t*>(&commitment), ADDRESS_BYTES)},
             {"nullifier", bytes_to_hex(reinterpret_cast<const uint8_t*>(&nullifier), ADDRESS_BYTES)},

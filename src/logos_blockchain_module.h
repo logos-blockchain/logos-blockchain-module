@@ -136,11 +136,15 @@ public:
     // Cryptarchia
     [[nodiscard]] StdLogosResult get_cryptarchia_info() const;
 
-logos_events :
+    // clang-format off
+// Clang-format only handles public/private/protected, so it miss-indents this section.
+// Guard kept until https://github.com/llvm/llvm-project/issues/64763 lands.
+logos_events:
     // Fired by on_new_block_callback when the Rust node delivers a new block.
     // blockJson is the full block serialized as JSON.
     // ReSharper disable once CppFunctionIsNotImplemented
     void newBlock(const std::string& blockJson);
+    // clang-format on
 
 private:
     LogosBlockchainNode* node = nullptr;
