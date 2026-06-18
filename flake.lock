@@ -853,16 +853,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1781789100,
+        "lastModified": 1781792889,
         "narHash": "sha256-i7zTkYSpQGMBfVvD5mNZ1UBU1Slk0Yi31g2GIHvCSbM=",
         "owner": "logos-co",
         "repo": "logos-module-builder",
-        "rev": "5302512d67e076c07cccdf314fd22e073551a47b",
+        "rev": "38ddf92c1f240f4e420d300a1fbabb1609d5db01",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
-        "ref": "fix/dev-shell-external-lib-paths",
+        "ref": "38ddf92c1f240f4e420d300a1fbabb1609d5db01",
         "repo": "logos-module-builder",
         "type": "github"
       }
