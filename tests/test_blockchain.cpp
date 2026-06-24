@@ -6,7 +6,6 @@
 
 #include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <string>
 #include <unistd.h>
 #include <vector>
@@ -40,16 +39,7 @@ struct TempDir {
 };
 
 // Helper: create a module with a running (mocked) node.
-// Sets up circuits directory, LOGOS_MODULE_PATH env, and calls start().
 static LogosBlockchainModule* createStartedModule(LogosTestContext& t, TempDir& tmpDir) {
-    fs::create_directories(tmpDir.path / "circuits");
-    {
-        std::ofstream f((tmpDir.path / "circuits" / "dummy.bin").string());
-        f << "x";
-    }
-
-    setenv("LOGOS_MODULE_PATH", tmpDir.path.string().c_str(), 1);
-
     auto* module = new LogosBlockchainModule();
 
     t.mockCFunction("start_lb_node").returns(1);

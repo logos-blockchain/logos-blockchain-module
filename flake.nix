@@ -22,35 +22,7 @@
         mockCLibs = [ "logos_blockchain" ];
       };
 
-      preConfigure = { externalLibs }:
-        if externalLibs ? logos_blockchain then ''
-          if [ -d "${externalLibs.logos_blockchain}/circuits" ]; then
-            echo "Staging zk circuits from logos-blockchain..."
-            cp -r "${externalLibs.logos_blockchain}/circuits" ./circuits
-            chmod -R u+w ./circuits
-          else
-            echo "WARNING: no circuits/ found in logos-blockchain derivation"
-          fi
-        '' else ''
-          echo "Skipping zk circuits staging (logos_blockchain mocked for tests)"
-        '';
-
-      # Logos Core Edge-case
-      # The current version of Logos Core expects circuits' binaries under `lib/circuits/`.
-      # Until we address this in Logos Core, we use this hook to include to ensure the circuits' binaries
-      # are included in the binary bundle and avoid the circuits being mangled by Nix (which did that when
-      # copying them in a previous phase).
       postInstall = ''
-        if [ -d "$LOGOS_MODULE_SOURCE_DIR/circuits" ]; then
-          cp -r "$LOGOS_MODULE_SOURCE_DIR/circuits" "$out/lib/circuits"
-          chmod -R u+w "$out/lib/circuits"
-
-          if [ -f "$out/lib/circuits/lib/libgmp.a" ]; then
-            echo "Removing loose static library libgmp.a from staged circuits..."
-            rm "$out/lib/circuits/lib/libgmp.a"
-          fi
-        fi
-
         # Remove nix references to make the module portable.
         find "$out" -type f | while read -r binary; do
           if file "$binary" | grep -E -q "Mach-O|shared library|executable|archive"; then

@@ -6,12 +6,10 @@
 #include <cctype>
 #include <charconv>
 #include <cstdio>
-#include <filesystem>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
-namespace fs = std::filesystem;
 using json = nlohmann::json;
 
 // Define static member
@@ -224,37 +222,6 @@ namespace {
     };
 } // namespace
 
-namespace environment {
-    constexpr auto LOGOS_BLOCKCHAIN_CIRCUITS = "LOGOS_BLOCKCHAIN_CIRCUITS";
-
-    bool is_circuits_path_valid(const std::string& path) {
-        std::error_code ec;
-        if (!fs::is_directory(path, ec))
-            return false;
-        for (const auto& entry : fs::directory_iterator(path, ec)) { // NOLINT(*-use-anyofallof)
-            if (entry.is_regular_file())
-                return true;
-        }
-        return false;
-    }
-
-    void setup_circuits_path(const std::string& module_path) {
-        const fs::path circuits_path = fs::path(module_path) / "circuits";
-        const std::string circuits_str = circuits_path.string();
-
-        if (!is_circuits_path_valid(circuits_str)) {
-            fprintf(
-                stderr,
-                "FATAL: The LOGOS_BLOCKCHAIN_CIRCUITS environment variable is not set or does not contain any files.\n"
-            );
-            return;
-        }
-
-        setenv("LOGOS_BLOCKCHAIN_CIRCUITS", circuits_str.c_str(), 1);
-        fprintf(stderr, "LOGOS_BLOCKCHAIN_CIRCUITS set to: %s\n", circuits_str.c_str());
-    }
-} // namespace environment
-
 void LogosBlockchainModule::on_new_block_callback(const char* block) {
     if (s_instance) {
         fprintf(stderr, "Received new block: %s\n", block);
@@ -306,13 +273,6 @@ StdLogosResult LogosBlockchainModule::start(const std::string& config_path, cons
     if (node) {
         fprintf(stderr, "Could not execute the operation: The node is already running.\n");
         return result::err("The node is already running.");
-    }
-
-    const char* module_path_env = std::getenv("LOGOS_MODULE_PATH");
-    if (module_path_env && *module_path_env) {
-        environment::setup_circuits_path(module_path_env);
-    } else {
-        fprintf(stderr, "Warning: LOGOS_MODULE_PATH not set, skipping circuits' path setup.\n");
     }
 
     std::string effective_config_path = config_path;
