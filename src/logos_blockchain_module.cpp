@@ -307,8 +307,7 @@ StdLogosResult LogosBlockchainModule::generate_user_config(const std::string& js
     // standalone callers omit the flag and keep their own paths (or the node
     // defaults). Any path the caller set explicitly is left untouched.
     bool use_persistence_paths = false;
-    if (const auto it = parsed_args.find("use_persistence_paths");
-        it != parsed_args.end() && it->is_boolean()) {
+    if (const auto it = parsed_args.find("use_persistence_paths"); it != parsed_args.end() && it->is_boolean()) {
         use_persistence_paths = it->get<bool>();
     }
     parsed_args.erase("use_persistence_paths"); // not an FFI field
@@ -319,9 +318,8 @@ StdLogosResult LogosBlockchainModule::generate_user_config(const std::string& js
             const fs::path base(persistence);
             // Only fill a path the caller didn't pin (non-empty string wins).
             const auto set_if_absent = [&parsed_args](const char* key, const std::string& value) {
-                const bool provided = parsed_args.contains(key)
-                    && parsed_args[key].is_string()
-                    && !parsed_args[key].get<std::string>().empty();
+                const bool provided = parsed_args.contains(key) && parsed_args[key].is_string() &&
+                                      !parsed_args[key].get<std::string>().empty();
                 if (!provided)
                     parsed_args[key] = value;
             };
@@ -336,8 +334,8 @@ StdLogosResult LogosBlockchainModule::generate_user_config(const std::string& js
             // as relative to the base; a missing output defaults to
             // "<base>/user_config.yaml".
             fs::path output_rel = "user_config.yaml";
-            if (parsed_args.contains("output") && parsed_args["output"].is_string()
-                && !parsed_args["output"].get<std::string>().empty()) {
+            if (parsed_args.contains("output") && parsed_args["output"].is_string() &&
+                !parsed_args["output"].get<std::string>().empty()) {
                 const fs::path given(localPathFromFileUrl(parsed_args["output"].get<std::string>()));
                 const fs::path rel = given.relative_path();
                 output_rel = rel.empty() ? given.filename() : rel;
@@ -354,7 +352,8 @@ StdLogosResult LogosBlockchainModule::generate_user_config(const std::string& js
         } else {
             fprintf(
                 stderr,
-                "generate_user_config: use_persistence_paths requested but no instance persistence path is set; leaving paths unchanged.\n"
+                "generate_user_config: use_persistence_paths requested but no instance persistence path is set; "
+                "leaving paths unchanged.\n"
             );
         }
     }
@@ -468,8 +467,7 @@ StdLogosResult LogosBlockchainModule::migrate_user_config_0_1_2(
     const std::string old_config = localPathFromFileUrl(old_config_path);
     const std::string keystore = localPathFromFileUrl(keystore_path);
 
-    OperationStatus status =
-        ::migrate_user_config_0_1_2(new_config.c_str(), old_config.c_str(), keystore.c_str());
+    OperationStatus status = ::migrate_user_config_0_1_2(new_config.c_str(), old_config.c_str(), keystore.c_str());
     return result::from_operation_status(status);
 }
 
@@ -484,8 +482,7 @@ StdLogosResult LogosBlockchainModule::participate(
     const std::string output = localPathFromFileUrl(output_dir);
     const char* external_address_ptr = external_address.empty() ? nullptr : external_address.c_str();
 
-    OperationStatus status =
-        ::participate(config.c_str(), keystore.c_str(), output.c_str(), external_address_ptr);
+    OperationStatus status = ::participate(config.c_str(), keystore.c_str(), output.c_str(), external_address_ptr);
     return result::from_operation_status(status);
 }
 
