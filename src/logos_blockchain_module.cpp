@@ -17,6 +17,19 @@ using json = nlohmann::json;
 // Define static member
 LogosBlockchainModule* LogosBlockchainModule::s_instance = nullptr;
 
+namespace operation_status {
+    // Takes the Rust-allocated message out of an OperationStatus and frees it.
+    std::string take_message(OperationStatus& status) {
+        std::string message;
+        if (status.message) {
+            message = status.message;
+            (void)free_cstring(status.message);
+            status.message = nullptr;
+        }
+        return message;
+    }
+} // namespace operation_status
+
 // Shorthands for building StdLogosResult values.
 namespace result {
     StdLogosResult ok() {
@@ -30,6 +43,13 @@ namespace result {
 
     StdLogosResult err(std::string message) {
         return {false, {}, std::move(message)};
+    }
+
+    StdLogosResult from_operation_status(OperationStatus& status) {
+        if (is_ok(&status)) {
+            return ok();
+        }
+        return err(operation_status::take_message(status));
     }
 } // namespace result
 
@@ -269,7 +289,7 @@ LogosBlockchainModule::~LogosBlockchainModule() {
 
 // Lifecycle
 
-StdLogosResult LogosBlockchainModule::generate_user_config(const std::string& json_args) {
+StdLogosResult LogosBlockchainModule::generate_user_config(const std::string& json_args) const {
     json parsed_args;
     try {
         parsed_args = json::parse(json_args);
@@ -349,10 +369,9 @@ StdLogosResult LogosBlockchainModule::generate_user_config(const std::string& js
 
     const OwnedGenerateConfigArgs owned_args(parsed_args);
 
-    const OperationStatus status = ::generate_user_config(owned_args.ffi_args);
+    OperationStatus status = ::generate_user_config(owned_args.ffi_args);
     if (!is_ok(&status)) {
-        fprintf(stderr, "Failed to generate user config. Error: %d\n", status);
-        return result::err("Failed to generate user config.");
+        return result::err(operation_status::take_message(status));
     }
 
     return result::ok(resolved_output);
@@ -384,28 +403,19 @@ StdLogosResult LogosBlockchainModule::start(const std::string& config_path, cons
     const char* deployment_ptr = deployment_path.empty() ? nullptr : deployment_path.c_str();
 
     auto [value, error] = start_lb_node(config_path_ptr, deployment_ptr);
-    fprintf(stderr, "Start node returned with value and error.\n");
     if (!is_ok(&error)) {
-        fprintf(stderr, "Failed to start the node. Error: %d\n", error);
-        return result::err("Failed to start the node.");
+        return result::err(operation_status::take_message(error));
     }
 
     node = value;
-    fprintf(stderr, "The node was started successfully.\n");
 
     if (!node) {
-        fprintf(stderr, "Could not subscribe to block events: The node is not running.\n");
         return result::err("Could not subscribe to block events: the node is not running.");
     }
 
     s_instance = this;
-    const OperationStatus subscribe_status = subscribe_to_new_blocks(node, on_new_block_callback);
-    if (!is_ok(&subscribe_status)) {
-        fprintf(stderr, "Failed to subscribe to new blocks. Error: %d\n", subscribe_status);
-        return result::err("Failed to subscribe to new blocks.");
-    }
-
-    return result::ok();
+    OperationStatus subscribe_status = subscribe_to_new_blocks(node, on_new_block_callback);
+    return result::from_operation_status(subscribe_status);
 }
 
 StdLogosResult LogosBlockchainModule::stop() {
@@ -416,11 +426,9 @@ StdLogosResult LogosBlockchainModule::stop() {
 
     s_instance = nullptr;
 
-    const OperationStatus status = stop_node(node);
-    if (is_ok(&status)) {
-        fprintf(stderr, "The node was stopped successfully.\n");
-    } else {
-        fprintf(stderr, "Could not stop the node. Error: %d\n", status);
+    OperationStatus status = stop_node(node);
+    if (!is_ok(&status)) {
+        fprintf(stderr, "Could not stop the node: %s\n", operation_status::take_message(status).c_str());
     }
 
     node = nullptr;
@@ -436,12 +444,8 @@ StdLogosResult LogosBlockchainModule::update_user_config(
     const std::string config = localPathFromFileUrl(user_config_path);
     const std::string keystore = localPathFromFileUrl(keystore_path);
 
-    const OperationStatus status = ::update_user_config(config.c_str(), keystore.c_str());
-    if (!is_ok(&status)) {
-        fprintf(stderr, "Failed to update user config. Error: %d\n", status);
-        return result::err("Failed to update user config.");
-    }
-    return result::ok();
+    OperationStatus status = ::update_user_config(config.c_str(), keystore.c_str());
+    return result::from_operation_status(status);
 }
 
 StdLogosResult LogosBlockchainModule::migrate_user_config(
@@ -451,12 +455,8 @@ StdLogosResult LogosBlockchainModule::migrate_user_config(
     const std::string output = localPathFromFileUrl(output_path);
     const std::string keystore = localPathFromFileUrl(keystore_path);
 
-    const OperationStatus status = ::migrate_user_config(output.c_str(), keystore.c_str());
-    if (!is_ok(&status)) {
-        fprintf(stderr, "Failed to migrate user config. Error: %d\n", status);
-        return result::err("Failed to migrate user config.");
-    }
-    return result::ok();
+    OperationStatus status = ::migrate_user_config(output.c_str(), keystore.c_str());
+    return result::from_operation_status(status);
 }
 
 StdLogosResult LogosBlockchainModule::migrate_user_config_0_1_2(
@@ -468,13 +468,9 @@ StdLogosResult LogosBlockchainModule::migrate_user_config_0_1_2(
     const std::string old_config = localPathFromFileUrl(old_config_path);
     const std::string keystore = localPathFromFileUrl(keystore_path);
 
-    const OperationStatus status =
+    OperationStatus status =
         ::migrate_user_config_0_1_2(new_config.c_str(), old_config.c_str(), keystore.c_str());
-    if (!is_ok(&status)) {
-        fprintf(stderr, "Failed to migrate 0.1.2 config. Error: %d\n", status);
-        return result::err("Failed to migrate 0.1.2 config.");
-    }
-    return result::ok();
+    return result::from_operation_status(status);
 }
 
 StdLogosResult LogosBlockchainModule::participate(
@@ -488,13 +484,9 @@ StdLogosResult LogosBlockchainModule::participate(
     const std::string output = localPathFromFileUrl(output_dir);
     const char* external_address_ptr = external_address.empty() ? nullptr : external_address.c_str();
 
-    const OperationStatus status =
+    OperationStatus status =
         ::participate(config.c_str(), keystore.c_str(), output.c_str(), external_address_ptr);
-    if (!is_ok(&status)) {
-        fprintf(stderr, "Failed to generate participation data. Error: %d\n", status);
-        return result::err("Failed to generate participation data.");
-    }
-    return result::ok();
+    return result::from_operation_status(status);
 }
 
 // Keystore
@@ -516,14 +508,13 @@ StdLogosResult LogosBlockchainModule::generate_key(
 
     auto [value, error] = ::generate_key(config.c_str(), keystore.c_str(), type, key_title_ptr);
     if (!is_ok(&error)) {
-        fprintf(stderr, "Failed to generate key. Error: %d\n", error);
-        return result::err("Failed to generate key: " + std::to_string(error));
+        return result::err(operation_status::take_message(error));
     }
 
     const std::string out(value);
-    const OperationStatus free_status = free_cstring(value);
+    OperationStatus free_status = free_cstring(value);
     if (!is_ok(&free_status)) {
-        fprintf(stderr, "Failed to free key id string. Error: %d\n", free_status);
+        fprintf(stderr, "Failed to free key id string: %s\n", operation_status::take_message(free_status).c_str());
     }
     return result::ok(out);
 }
@@ -545,12 +536,8 @@ StdLogosResult LogosBlockchainModule::add_key(
     const std::string keystore = localPathFromFileUrl(keystore_path);
     const char* key_title_ptr = key_title.empty() ? nullptr : key_title.c_str();
 
-    const OperationStatus status = ::add_key(config.c_str(), keystore.c_str(), type, key_hex.c_str(), key_title_ptr);
-    if (!is_ok(&status)) {
-        fprintf(stderr, "Failed to add key. Error: %d\n", status);
-        return result::err("Failed to add key.");
-    }
-    return result::ok();
+    OperationStatus status = ::add_key(config.c_str(), keystore.c_str(), type, key_hex.c_str(), key_title_ptr);
+    return result::from_operation_status(status);
 }
 
 StdLogosResult LogosBlockchainModule::remove_key(
@@ -561,12 +548,8 @@ StdLogosResult LogosBlockchainModule::remove_key(
     const std::string config = localPathFromFileUrl(user_config_path);
     const std::string keystore = localPathFromFileUrl(keystore_path);
 
-    const OperationStatus status = ::remove_key(config.c_str(), keystore.c_str(), key_title.c_str());
-    if (!is_ok(&status)) {
-        fprintf(stderr, "Failed to remove key. Error: %d\n", status);
-        return result::err("Failed to remove key.");
-    }
-    return result::ok();
+    OperationStatus status = ::remove_key(config.c_str(), keystore.c_str(), key_title.c_str());
+    return result::from_operation_status(status);
 }
 
 // Identity
@@ -576,14 +559,13 @@ StdLogosResult LogosBlockchainModule::get_peer_id(const std::string& config_path
 
     auto [value, error] = ::get_peer_id(config.c_str());
     if (!is_ok(&error)) {
-        fprintf(stderr, "Failed to get peer id. Error: %d\n", error);
-        return result::err("Failed to get peer id: " + std::to_string(error));
+        return result::err(operation_status::take_message(error));
     }
 
     const std::string out(value);
-    const OperationStatus free_status = free_cstring(value);
+    OperationStatus free_status = free_cstring(value);
     if (!is_ok(&free_status)) {
-        fprintf(stderr, "Failed to free peer id string. Error: %d\n", free_status);
+        fprintf(stderr, "Failed to free peer id string: %s\n", operation_status::take_message(free_status).c_str());
     }
     return result::ok(out);
 }
@@ -603,7 +585,7 @@ StdLogosResult LogosBlockchainModule::wallet_get_balance(const std::string& addr
 
     auto [value, error] = get_balance(node, bytes.data(), nullptr);
     if (!is_ok(&error)) {
-        return result::err("Failed to get balance: " + std::to_string(error));
+        return result::err(operation_status::take_message(error));
     }
 
     return result::ok(std::to_string(value));
@@ -671,7 +653,7 @@ StdLogosResult LogosBlockchainModule::wallet_transfer_funds(
 
     auto [value, error] = transfer_funds(node, &args);
     if (!is_ok(&error)) {
-        return result::err("Failed to transfer funds: " + std::to_string(error));
+        return result::err(operation_status::take_message(error));
     }
     return result::ok(bytes_to_hex(reinterpret_cast<const uint8_t*>(&value), ADDRESS_BYTES));
 }
@@ -683,8 +665,7 @@ StdLogosResult LogosBlockchainModule::wallet_get_known_addresses() const {
     }
     auto [value, error] = get_known_addresses(node);
     if (!is_ok(&error)) {
-        fprintf(stderr, "Failed to get known addresses. Error: %d\n", error);
-        return result::err("Failed to get known addresses: " + std::to_string(error));
+        return result::err(operation_status::take_message(error));
     }
     std::vector<std::string> out;
     for (size_t i = 0; i < value.len; ++i) {
@@ -694,9 +675,9 @@ StdLogosResult LogosBlockchainModule::wallet_get_known_addresses() const {
             out.push_back(bytes_to_hex(ptr, ADDRESS_BYTES));
         }
     }
-    const OperationStatus free_status = free_known_addresses(value);
+    OperationStatus free_status = free_known_addresses(value);
     if (!is_ok(&free_status)) {
-        fprintf(stderr, "Failed to free known addresses. Error: %d\n", free_status);
+        fprintf(stderr, "Failed to free known addresses: %s\n", operation_status::take_message(free_status).c_str());
     }
     fprintf(
         stderr,
@@ -732,7 +713,7 @@ StdLogosResult LogosBlockchainModule::wallet_get_notes(
 
     auto [value, error] = get_wallet_notes(node, address_bytes.data(), optional_tip);
     if (!is_ok(&error)) {
-        return result::err("Failed to get wallet notes: " + std::to_string(error));
+        return result::err(operation_status::take_message(error));
     }
 
     json obj;
@@ -748,9 +729,9 @@ StdLogosResult LogosBlockchainModule::wallet_get_notes(
     }
     obj["notes"] = std::move(notes);
 
-    const OperationStatus free_status = free_wallet_notes(value);
+    OperationStatus free_status = free_wallet_notes(value);
     if (!is_ok(&free_status)) {
-        fprintf(stderr, "Failed to free wallet notes. Error: %d\n", free_status);
+        fprintf(stderr, "Failed to free wallet notes: %s\n", operation_status::take_message(free_status).c_str());
     }
     return result::ok(obj.dump());
 }
@@ -762,7 +743,7 @@ StdLogosResult LogosBlockchainModule::leader_claim() const {
 
     auto [value, error] = ::leader_claim(node);
     if (!is_ok(&error)) {
-        return result::err("Failed to claim leader rewards: " + std::to_string(error));
+        return result::err(operation_status::take_message(error));
     }
 
     return result::ok(bytes_to_hex(reinterpret_cast<const uint8_t*>(&value), TX_HASH_BYTES));
@@ -827,7 +808,7 @@ StdLogosResult LogosBlockchainModule::channel_deposit(
 
     auto [value, error] = ::channel_deposit(node, &args);
     if (!is_ok(&error)) {
-        return result::err("Failed to deposit into channel: " + std::to_string(error));
+        return result::err(operation_status::take_message(error));
     }
     return result::ok(bytes_to_hex(reinterpret_cast<const uint8_t*>(&value), ADDRESS_BYTES));
 }
@@ -923,7 +904,7 @@ StdLogosResult LogosBlockchainModule::channel_deposit_with_notes(
 
     auto [value, error] = ::channel_deposit_with_notes(node, &args);
     if (!is_ok(&error)) {
-        return result::err("Failed to deposit into channel: " + std::to_string(error));
+        return result::err(operation_status::take_message(error));
     }
     return result::ok(bytes_to_hex(reinterpret_cast<const uint8_t*>(&value), ADDRESS_BYTES));
 }
@@ -935,7 +916,7 @@ StdLogosResult LogosBlockchainModule::wallet_get_claimable_vouchers() const {
 
     auto [value, error] = get_claimable_vouchers(node, nullptr);
     if (!is_ok(&error)) {
-        return result::err("Failed to get claimable vouchers: " + std::to_string(error));
+        return result::err(operation_status::take_message(error));
     }
 
     json obj;
@@ -950,9 +931,9 @@ StdLogosResult LogosBlockchainModule::wallet_get_claimable_vouchers() const {
         });
     }
 
-    const OperationStatus free_status = free_claimable_vouchers(value);
+    OperationStatus free_status = free_claimable_vouchers(value);
     if (!is_ok(&free_status)) {
-        fprintf(stderr, "Failed to free claimable vouchers. Error: %d\n", free_status);
+        fprintf(stderr, "Failed to free claimable vouchers: %s\n", operation_status::take_message(free_status).c_str());
     }
 
     return result::ok(obj.dump());
@@ -1001,7 +982,7 @@ StdLogosResult LogosBlockchainModule::blend_join_as_core_node(
         locators_ptrs.size()
     );
     if (!is_ok(&error)) {
-        return result::err("Failed to join as core node: " + std::to_string(error));
+        return result::err(operation_status::take_message(error));
     }
 
     std::string declaration_id = bytes_to_hex(reinterpret_cast<const uint8_t*>(&value), sizeof(value));
@@ -1023,14 +1004,13 @@ StdLogosResult LogosBlockchainModule::get_block(const std::string& header_id_hex
 
     auto [value, error] = ::get_block(node, reinterpret_cast<const HeaderId*>(bytes.data()));
     if (!is_ok(&error)) {
-        fprintf(stderr, "Failed to get block. Error: %d\n", error);
-        return result::err("Failed to get block: " + std::to_string(error));
+        return result::err(operation_status::take_message(error));
     }
 
     std::string out(value);
-    const OperationStatus free_status = free_cstring(value);
+    OperationStatus free_status = free_cstring(value);
     if (!is_ok(&free_status)) {
-        fprintf(stderr, "Failed to free block string. Error: %d\n", free_status);
+        fprintf(stderr, "Failed to free block string: %s\n", operation_status::take_message(free_status).c_str());
     }
     return result::ok(std::move(out));
 }
@@ -1042,14 +1022,13 @@ StdLogosResult LogosBlockchainModule::get_blocks(const uint64_t from_slot, const
 
     auto [value, error] = ::get_blocks(node, from_slot, to_slot);
     if (!is_ok(&error)) {
-        fprintf(stderr, "Failed to get blocks. Error: %d\n", error);
-        return result::err("Failed to get blocks: " + std::to_string(error));
+        return result::err(operation_status::take_message(error));
     }
 
     std::string out(value);
-    const OperationStatus free_status = free_cstring(value);
+    OperationStatus free_status = free_cstring(value);
     if (!is_ok(&free_status)) {
-        fprintf(stderr, "Failed to free blocks string. Error: %d\n", free_status);
+        fprintf(stderr, "Failed to free blocks string: %s\n", operation_status::take_message(free_status).c_str());
     }
     return result::ok(std::move(out));
 }
@@ -1066,14 +1045,13 @@ StdLogosResult LogosBlockchainModule::get_transaction(const std::string& tx_hash
 
     auto [value, error] = ::get_transaction(node, reinterpret_cast<const TxHash*>(bytes.data()));
     if (!is_ok(&error)) {
-        fprintf(stderr, "Failed to get transaction. Error: %d\n", error);
-        return result::err("Failed to get transaction: " + std::to_string(error));
+        return result::err(operation_status::take_message(error));
     }
 
     std::string out(value);
-    const OperationStatus free_status = free_cstring(value);
+    OperationStatus free_status = free_cstring(value);
     if (!is_ok(&free_status)) {
-        fprintf(stderr, "Failed to free transaction string. Error: %d\n", free_status);
+        fprintf(stderr, "Failed to free transaction string: %s\n", operation_status::take_message(free_status).c_str());
     }
     return result::ok(std::move(out));
 }
@@ -1087,8 +1065,7 @@ StdLogosResult LogosBlockchainModule::get_cryptarchia_info() const {
 
     auto [value, error] = ::get_cryptarchia_info(node);
     if (!is_ok(&error)) {
-        fprintf(stderr, "Failed to get cryptarchia info. Error: %d\n", error);
-        return result::err("Failed to get cryptarchia info: " + std::to_string(error));
+        return result::err(operation_status::take_message(error));
     }
 
     json obj;
@@ -1098,9 +1075,9 @@ StdLogosResult LogosBlockchainModule::get_cryptarchia_info() const {
     obj["height"] = static_cast<int64_t>(value->height);
     obj["mode"] = (value->mode == State::Online) ? "Online" : "Bootstrapping";
 
-    const OperationStatus free_status = free_cryptarchia_info(value);
+    OperationStatus free_status = free_cryptarchia_info(value);
     if (!is_ok(&free_status)) {
-        fprintf(stderr, "Failed to free cryptarchia info. Error: %d\n", free_status);
+        fprintf(stderr, "Failed to free cryptarchia info: %s\n", operation_status::take_message(free_status).c_str());
     }
     return result::ok(obj.dump());
 }
