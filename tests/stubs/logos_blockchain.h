@@ -221,11 +221,8 @@ OperationStatus free_claimable_vouchers(ClaimableVouchers vouchers);
 // Blend
 BlendHashResult blend_join_as_core_node(
     LogosBlockchainNode* node,
-    const uint8_t* provider_id,
-    const uint8_t* zk_id,
-    const uint8_t* locked_note_id,
-    const char** locators,
-    size_t locators_count);
+    const char* locator,
+    const uint8_t* locked_note_id);
 
 // Explorer
 StringResult get_block(LogosBlockchainNode* node, const HeaderId* header_id);

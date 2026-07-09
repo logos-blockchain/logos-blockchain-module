@@ -939,23 +939,15 @@ StdLogosResult LogosBlockchainModule::wallet_get_claimable_vouchers() const {
 // Blend
 
 StdLogosResult LogosBlockchainModule::blend_join_as_core_node(
-    const std::string& provider_id_hex,
-    const std::string& zk_id_hex,
-    const std::string& locked_note_id_hex,
-    const std::vector<std::string>& locators
+    const std::string& locator,
+    const std::string& locked_note_id_hex
 ) const {
     if (!node) {
         return result::err("The node is not running.");
     }
 
-    const std::vector<uint8_t> provider_id_bytes = parse_address_hex(provider_id_hex);
-    if (provider_id_bytes.empty() || static_cast<int>(provider_id_bytes.size()) != ADDRESS_BYTES) {
-        return result::err("Invalid provider_id_hex (64 hex characters required).");
-    }
-
-    const std::vector<uint8_t> zk_id_bytes = parse_address_hex(zk_id_hex);
-    if (zk_id_bytes.empty() || static_cast<int>(zk_id_bytes.size()) != ADDRESS_BYTES) {
-        return result::err("Invalid zk_id_hex (64 hex characters required).");
+    if (locator.empty()) {
+        return result::err("Invalid locator (must not be empty).");
     }
 
     const std::vector<uint8_t> locked_note_id_bytes = parse_address_hex(locked_note_id_hex);
@@ -963,20 +955,10 @@ StdLogosResult LogosBlockchainModule::blend_join_as_core_node(
         return result::err("Invalid locked_note_id_hex (64 hex characters required).");
     }
 
-    // locators_ptrs holds raw pointers into the std::strings (valid as long as `locators` lives).
-    std::vector<const char*> locators_ptrs;
-    locators_ptrs.reserve(locators.size());
-    for (const std::string& locator : locators) {
-        locators_ptrs.push_back(locator.c_str());
-    }
-
     auto [value, error] = ::blend_join_as_core_node(
         node,
-        provider_id_bytes.data(),
-        zk_id_bytes.data(),
-        locked_note_id_bytes.data(),
-        locators_ptrs.data(),
-        locators_ptrs.size()
+        locator.c_str(),
+        locked_note_id_bytes.data()
     );
     if (!is_ok(&error)) {
         return result::err(operation_status::take_message(error));
