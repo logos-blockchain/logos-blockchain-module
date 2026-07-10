@@ -354,7 +354,7 @@ LOGOS_TEST(stop_succeeds_with_running_node) {
     LOGOS_ASSERT_TRUE(module != nullptr);
 
     LOGOS_ASSERT_TRUE(module->stop().success);
-    LOGOS_ASSERT(t.cFunctionCalled("stop_node"));
+    LOGOS_ASSERT(t.cFunctionCalled("shutdown_node"));
     delete module;
 }
 

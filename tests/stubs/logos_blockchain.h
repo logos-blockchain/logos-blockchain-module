@@ -62,7 +62,7 @@ typedef struct {
     const char* state_path;
     const char* storage_path;
     const char* logs_path;
-    const bool* ibd;
+    const bool* skip_ibd;
     const char* log_filter;
     const char* kms_file;
 } GenerateConfigArgs;
@@ -162,7 +162,7 @@ bool is_ok(const OperationStatus* status);
 // Lifecycle
 OperationStatus generate_user_config(GenerateConfigArgs args);
 NodeResult start_lb_node(const char* config_path, const char* deployment);
-OperationStatus stop_node(LogosBlockchainNode* node);
+OperationStatus shutdown_node(LogosBlockchainNode* node);
 OperationStatus subscribe_to_new_blocks(LogosBlockchainNode* node, BlockCallback callback);
 
 // Config management

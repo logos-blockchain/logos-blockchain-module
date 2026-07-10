@@ -144,7 +144,7 @@ namespace {
         std::string state_path_data;
         std::string storage_path_data;
         std::string logs_path_data;
-        bool ibd_val;
+        bool skip_ibd_val;
         std::string log_filter_data;
         std::string kms_file_data;
 
@@ -235,12 +235,12 @@ namespace {
                 ffi_args.logs_path = nullptr;
             }
 
-            // ibd (bool -> const bool*)
-            if (args.contains("ibd") && args["ibd"].is_boolean()) {
-                ibd_val = args["ibd"].get<bool>();
-                ffi_args.ibd = &ibd_val;
+            // skip_ibd (bool -> const bool*)
+            if (args.contains("skip_ibd") && args["skip_ibd"].is_boolean()) {
+                skip_ibd_val = args["skip_ibd"].get<bool>();
+                ffi_args.skip_ibd = &skip_ibd_val;
             } else {
-                ffi_args.ibd = nullptr;
+                ffi_args.skip_ibd = nullptr;
             }
 
             // log_filter (string -> const char*)
@@ -425,7 +425,7 @@ StdLogosResult LogosBlockchainModule::stop() {
 
     s_instance = nullptr;
 
-    OperationStatus status = stop_node(node);
+    OperationStatus status = shutdown_node(node);
     if (!is_ok(&status)) {
         fprintf(stderr, "Could not stop the node: %s\n", operation_status::take_message(status).c_str());
     }

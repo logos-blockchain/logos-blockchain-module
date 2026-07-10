@@ -58,8 +58,8 @@ NodeResult start_lb_node(const char* config_path, const char* deployment) {
     return result;
 }
 
-OperationStatus stop_node(LogosBlockchainNode* node) {
-    LOGOS_CMOCK_RECORD("stop_node");
+OperationStatus shutdown_node(LogosBlockchainNode* node) {
+    LOGOS_CMOCK_RECORD("shutdown_node");
     return make_status(0);
 }
 

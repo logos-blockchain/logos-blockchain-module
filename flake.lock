@@ -24,11 +24,11 @@
         "rust-rapidsnark": "rust-rapidsnark"
       },
       "locked": {
-        "lastModified": 1783586767,
-        "narHash": "sha256-/oEB5DqR0pZQ4XR4D22PgbBDj3kb1/j6FXVxACUdZvo=",
+        "lastModified": 1783675573,
+        "narHash": "sha256-uDMtkfIevKV8GpiCyUbeJ3DtbmRpbhu5KhisSKIx7o8=",
         "ref": "refs/heads/fix/join-blend-ffi",
-        "rev": "4b6f4a36f40ffc184b7ebebaab0418e7518d115c",
-        "revCount": 1902,
+        "rev": "cc7b06a465f00fae68ebc9c675b099e2643f8dd5",
+        "revCount": 1903,
         "type": "git",
         "url": "file:///Users/netwave/projects/rust/nomos-node"
       },
