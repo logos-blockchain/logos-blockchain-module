@@ -24,17 +24,18 @@
         "rust-rapidsnark": "rust-rapidsnark"
       },
       "locked": {
-        "lastModified": 1783675573,
-        "narHash": "sha256-uDMtkfIevKV8GpiCyUbeJ3DtbmRpbhu5KhisSKIx7o8=",
-        "ref": "refs/heads/fix/join-blend-ffi",
-        "rev": "cc7b06a465f00fae68ebc9c675b099e2643f8dd5",
-        "revCount": 1903,
-        "type": "git",
-        "url": "file:///Users/netwave/projects/rust/nomos-node"
+        "lastModified": 1783712095,
+        "narHash": "sha256-N5uloPS1FGvG/ClJmga8/K8w+2hxQBJIRP68ide4H58=",
+        "owner": "logos-blockchain",
+        "repo": "logos-blockchain",
+        "rev": "ec648fa7239576dccb9aa8b684d4a780c9064797",
+        "type": "github"
       },
       "original": {
-        "type": "git",
-        "url": "file:///Users/netwave/projects/rust/nomos-node"
+        "owner": "logos-blockchain",
+        "ref": "ec648fa7239576dccb9aa8b684d4a780c9064797",
+        "repo": "logos-blockchain",
+        "type": "github"
       }
     },
     "logos-blockchain-circuits": {
