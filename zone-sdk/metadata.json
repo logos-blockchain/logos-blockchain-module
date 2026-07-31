@@ -1,0 +1,12 @@
+{
+  "name": "zone_sdk_client",
+  "version": "0.1.0",
+  "interface": "cdylib",
+  "dependencies": {
+    "blockchain_module": "LogosBlockchainModule"
+  },
+  "codegen": {
+    "lidl": "../blockchain_module.lidl",
+    "rust": {}
+  }
+}
