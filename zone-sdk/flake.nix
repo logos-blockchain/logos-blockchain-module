@@ -1,11 +1,6 @@
 {
   description = "Logos Zone SDK Module";
 
-  nixConfig = {
-    extra-substituters = [ "https://cache.nix.logos.co/public" ];
-    extra-trusted-public-keys = [ "public:l4HrXgL4nw246+LBh2SOJyhz64BoGegOYLheT/iIAPU=" ];
-  };
-
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder/0.2.6";
     logos-blockchain-module.url = "path:..";
@@ -45,17 +40,18 @@
             name = "zone-sdk-generate";
             runtimeInputs = [ lidlGen pkgs.git ];
             text = ''
-              root="$(git rev-parse --show-toplevel)"
-              echo "generating rust-lib/generated/provider_gen.rs ..."
-              mkdir -p "$root/rust-lib/generated"
-              logos-lidl-gen "$root/rust-lib/zone_sdk.lidl" --provider \
-                --dep blockchain_module="$root/rust-lib/deps/blockchain_module.lidl" \
-                -o "$root/rust-lib/generated/provider_gen.rs"
+              echo "generating src/generated/provider_gen.rs ..."
+              mkdir -p src/generated
+              
+              # Run the generator on your local lidl file
+              logos-lidl-gen blockchain_module.lidl --provider \
+                -o src/generated/provider_gen.rs
+
               echo "staging the SDK source at logos-rust-sdk-src/ ..."
-              rm -rf "''${root:?}/logos-rust-sdk-src"
-              cp -RL "${sdkSrc}" "$root/logos-rust-sdk-src"
-              chmod -R u+w "$root/logos-rust-sdk-src"
-              echo "done. bare 'cargo build' now works in rust-lib/"
+              rm -rf logos-rust-sdk-src
+              cp -RL "${sdkSrc}" logos-rust-sdk-src
+              chmod -R u+w logos-rust-sdk-src
+              echo "done. bare 'cargo build' now works in zone-sdk/"
             '';
           };
         in {

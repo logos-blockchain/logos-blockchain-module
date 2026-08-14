@@ -1,4 +1,4 @@
-include!("generated/provider_gen.rs");
+include!("../provider_gen.rs");
 
 pub struct WalletConsumerImpl;
 

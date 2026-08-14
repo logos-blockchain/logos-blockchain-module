@@ -1,0 +1,60 @@
+module blockchain_module {
+  version "0.1.0"
+  description "Logos Blockchain Module"
+
+  ; Lifecycle
+  method start(config_path: tstr, deployment: tstr) -> result
+  method stop() -> result
+
+  ; Config management
+  method generate_user_config(json_args: tstr) -> tstr
+  method update_user_config(user_config_path: tstr, keystore_path: tstr) -> result
+  method migrate_user_config(output_path: tstr, keystore_path: tstr) -> result
+  method migrate_user_config_0_1_2(new_config_path: tstr, old_config_path: tstr, keystore_path: tstr) -> result
+  method participate(config_path: tstr, keystore_path: tstr, output_dir: tstr, external_address: tstr) -> result
+
+  ; Keystore
+  method generate_key(user_config_path: tstr, keystore_path: tstr, key_type: tstr, key_title: tstr) -> tstr
+  method add_key(user_config_path: tstr, keystore_path: tstr, key_type: tstr, key_hex: tstr, key_title: tstr) -> result
+  method remove_key(user_config_path: tstr, keystore_path: tstr, key_title: tstr) -> result
+
+  ; Identity
+  method get_peer_id(config_path: tstr) -> tstr
+
+  ; Wallet
+  method wallet_get_balance(address_hex: tstr) -> tstr
+  method wallet_transfer_funds(change_public_key: tstr, sender_addresses: [tstr], recipient_address: tstr, amount: tstr, optional_tip_hex: tstr) -> tstr
+  method wallet_get_known_addresses() -> [tstr]
+  method wallet_get_notes(wallet_address_hex: tstr, optional_tip_hex: tstr) -> tstr
+  method leader_claim() -> tstr
+  method wallet_get_claimable_vouchers() -> tstr
+  method wallet_fund_tx(request_json: tstr) -> tstr
+
+  ; Transactions
+  method submit_signed_transaction(signed_tx_json: tstr) -> tstr
+
+  ; Channel
+  method channel_deposit(channel_id_hex: tstr, funding_public_key_hex: tstr, amount: tstr, metadata_hex: tstr, optional_tip_hex: tstr) -> tstr
+  method channel_deposit_with_notes(channel_id_hex: tstr, input_note_id_hexes: [tstr], metadata_hex: tstr, change_public_key_hex: tstr, funding_public_key_hexes: [tstr], max_tx_fee: tstr, optional_tip_hex: tstr) -> tstr
+  method get_channel_state(channel_id_hex: tstr) -> tstr
+
+  ; Blend
+  method blend_join_as_core_node(locator: tstr, locked_note_id_hex: tstr) -> tstr
+
+  ; Explorer
+  method get_block(header_id_hex: tstr) -> tstr
+  method get_blocks(from_slot: int, to_slot: int) -> tstr
+  method get_transaction(tx_hash_hex: tstr) -> tstr
+
+  ; Cryptarchia
+  method get_cryptarchia_info() -> tstr
+  method get_block_events(header_id_hex: tstr) -> tstr
+
+  ; Time
+  method get_time_info() -> tstr
+
+  ; Events
+  event newBlock(blockJson: tstr)
+  event processedBlock(eventJson: tstr)
+  event libBlock(blockInfoJson: tstr)
+}

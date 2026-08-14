@@ -6,7 +6,9 @@
     "blockchain_module": "LogosBlockchainModule"
   },
   "codegen": {
-    "lidl": "../blockchain_module.lidl",
-    "rust": {}
+    "lidl": "./blockchain_module.lidl",
+    "rust": {
+      "crate": "."
+    }
   }
 }
