@@ -44,8 +44,8 @@
               mkdir -p src/generated
               
               # Run the generator on your local lidl file
-              logos-lidl-gen blockchain_module.lidl --provider \
-                -o src/generated/provider_gen.rs
+              logos-lidl-gen blockchain_module.lidl --client \
+                -o src/generated/client_gen.rs
 
               echo "staging the SDK source at logos-rust-sdk-src/ ..."
               rm -rf logos-rust-sdk-src

@@ -1,20 +1,42 @@
-include!("../provider_gen.rs");
+mod generated;
 
-pub struct WalletConsumerImpl;
+use std::thread;
+use std::time::Duration;
 
-impl WalletConsumer for WalletConsumerImpl {
-    fn run_test(&mut self) {
-        println!("Consumer: Requesting time info from Blockchain Module...");
-        let mut blockchain = modules().blockchain_module;
+use crate::generated::client_gen::BlockchainModuleClient;
 
-        match blockchain.get_time_info() {
-            Ok(info) => println!("Consumer: Success! Time info: {}", info),
-            Err(e) => eprintln!("Consumer: Call failed: {:?}", e),
-        }
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Starting logos-zone-module client...");
+
+    let mut client = BlockchainModuleClient::new();
+
+    println!("Fetching time info...");
+    match client.get_time_info() {
+        Ok(time_json) => println!("Success! Time info: {}", time_json),
+        Err(e) => eprintln!("Failed to fetch time info: {:?}", e),
     }
-}
 
-#[no_mangle]
-pub extern "C" fn logos_module_install() -> *mut std::ffi::c_void {
-    install(WalletConsumerImpl)
+    let event_subscription = client.on_new_block()?;
+
+    thread::spawn(move || {
+        println!("Listening for newBlock events...");
+
+        for raw_event in event_subscription {
+            if let Some(new_block) = BlockchainModuleClient::decode_new_block(&raw_event) {
+                println!("New block received! JSON payload: {}", new_block.block_json);
+            } else {
+                eprintln!("Received malformed newBlock event.");
+            }
+        }
+        println!("Event stream disconnected.");
+    });
+
+    client.wallet_get_known_addresses_async(|result| match result {
+        Ok(addresses) => println!("Known addresses: {}", addresses),
+        Err(e) => eprintln!("Failed to get addresses: {:?}", e),
+    });
+
+    loop {
+        thread::sleep(Duration::from_secs(1));
+    }
 }
