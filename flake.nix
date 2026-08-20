@@ -1,6 +1,12 @@
 {
   description = "Logos Blockchain Module - Qt6 Plugin";
 
+  # Pull pre-built artifacts from the self-hosted Logos Attic cache(Nix binary cache).
+  nixConfig = {
+    extra-substituters = [ "https://cache.nix.logos.co/public" ];
+    extra-trusted-public-keys = [ "public:l4HrXgL4nw246+LBh2SOJyhz64BoGegOYLheT/iIAPU=" ];
+  };
+
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder/0.2.6";
     logos-blockchain.url = "github:logos-blockchain/logos-blockchain?ref=0.2.1";
