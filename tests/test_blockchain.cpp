@@ -333,6 +333,38 @@ LOGOS_TEST(get_time_info_without_node_returns_error) {
     LOGOS_ASSERT_FALSE(module.get_time_info().success);
 }
 
+LOGOS_TEST(pow_start_mining_without_node_returns_error) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+    StdLogosResult result = module.pow_start_mining();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
+}
+
+LOGOS_TEST(pow_stop_mining_without_node_returns_error) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+    StdLogosResult result = module.pow_stop_mining();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
+}
+
+LOGOS_TEST(pow_claim_without_node_returns_error) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+    StdLogosResult result = module.pow_claim();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
+}
+
+LOGOS_TEST(pow_claimable_rewards_without_node_returns_error) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+    StdLogosResult result = module.pow_claimable_rewards();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
+}
+
 LOGOS_TEST(get_channel_state_without_node_returns_error) {
     auto t = LogosTestContext("blockchain_module");
     LogosBlockchainModule module;
@@ -1456,6 +1488,126 @@ LOGOS_TEST(get_time_info_returns_error_on_ffi_failure) {
     t.mockCFunction("get_time_info_error").returns(1);
 
     LOGOS_ASSERT_FALSE(module->get_time_info().success);
+    delete module;
+}
+
+// ============================================================================
+// PoW
+// ============================================================================
+
+LOGOS_TEST(pow_start_mining_succeeds) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("pow_start_mining_error").returns(0);
+
+    LOGOS_ASSERT_TRUE(module->pow_start_mining().success);
+    LOGOS_ASSERT(t.cFunctionCalled("pow_start_mining"));
+    delete module;
+}
+
+LOGOS_TEST(pow_start_mining_returns_error_on_ffi_failure) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("pow_start_mining_error").returns(1);
+
+    LOGOS_ASSERT_FALSE(module->pow_start_mining().success);
+    delete module;
+}
+
+LOGOS_TEST(pow_stop_mining_succeeds) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("pow_stop_mining_error").returns(0);
+
+    LOGOS_ASSERT_TRUE(module->pow_stop_mining().success);
+    LOGOS_ASSERT(t.cFunctionCalled("pow_stop_mining"));
+    delete module;
+}
+
+LOGOS_TEST(pow_stop_mining_returns_error_on_ffi_failure) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("pow_stop_mining_error").returns(1);
+
+    LOGOS_ASSERT_FALSE(module->pow_stop_mining().success);
+    delete module;
+}
+
+LOGOS_TEST(pow_claim_returns_tx_hash_on_success) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("pow_claim_error").returns(0);
+
+    StdLogosResult result = module->pow_claim();
+    LOGOS_ASSERT_TRUE(result.success);
+    // Mock fills the hash with 0xCD -> hex "cdcd...cd".
+    std::string hash = result.value.get<std::string>();
+    LOGOS_ASSERT_EQ(static_cast<int>(hash.length()), 64);
+    LOGOS_ASSERT_TRUE(hash.substr(0, 2) == "cd");
+    LOGOS_ASSERT(t.cFunctionCalled("pow_claim"));
+    delete module;
+}
+
+LOGOS_TEST(pow_claim_returns_error_on_ffi_failure) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("pow_claim_error").returns(1);
+
+    StdLogosResult result = module->pow_claim();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "mock error"));
+    delete module;
+}
+
+LOGOS_TEST(pow_claimable_rewards_returns_json) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("pow_claimable_rewards_error").returns(0);
+    t.mockCFunction("pow_claimable_rewards_count").returns(2);
+
+    StdLogosResult result = module->pow_claimable_rewards();
+    LOGOS_ASSERT_TRUE(result.success);
+    std::string json = result.value.get<std::string>();
+    // Mock reports `count` tickets expiring in 100, 101, ... slots.
+    LOGOS_ASSERT_TRUE(contains(json, "\"claimable_tickets\":2"));
+    LOGOS_ASSERT_TRUE(contains(json, "[100,101]"));
+    LOGOS_ASSERT(t.cFunctionCalled("pow_claimable_rewards"));
+    LOGOS_ASSERT(t.cFunctionCalled("free_pow_claimable_rewards"));
+    delete module;
+}
+
+LOGOS_TEST(pow_claimable_rewards_returns_error_on_ffi_failure) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("pow_claimable_rewards_error").returns(1);
+
+    StdLogosResult result = module->pow_claimable_rewards();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "mock error"));
     delete module;
 }
 

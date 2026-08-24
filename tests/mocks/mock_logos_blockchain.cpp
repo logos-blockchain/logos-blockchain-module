@@ -402,6 +402,54 @@ OperationStatus free_time_info(TimeInfo* info) {
     return make_status(0);
 }
 
+OperationStatus pow_start_mining(LogosBlockchainNode* node) {
+    LOGOS_CMOCK_RECORD("pow_start_mining");
+    return make_status(LOGOS_CMOCK_RETURN(int, "pow_start_mining_error"));
+}
+
+OperationStatus pow_stop_mining(LogosBlockchainNode* node) {
+    LOGOS_CMOCK_RECORD("pow_stop_mining");
+    return make_status(LOGOS_CMOCK_RETURN(int, "pow_stop_mining_error"));
+}
+
+FfiPoWClaimResult pow_claim(LogosBlockchainNode* node) {
+    LOGOS_CMOCK_RECORD("pow_claim");
+    FfiPoWClaimResult result;
+    memset(result.value, 0xCD, sizeof(Hash));
+    result.error = make_status(LOGOS_CMOCK_RETURN(int, "pow_claim_error"));
+    return result;
+}
+
+// PoW claimable-rewards mock storage (up to 4 tickets)
+static uint64_t s_mockSlotsUntilExpiry[4];
+
+FfiPoWClaimableRewardsResult pow_claimable_rewards(LogosBlockchainNode* node) {
+    LOGOS_CMOCK_RECORD("pow_claimable_rewards");
+    FfiPoWClaimableRewardsResult result;
+    int err = LOGOS_CMOCK_RETURN(int, "pow_claimable_rewards_error");
+    result.error = make_status(err);
+    if (err == 0) {
+        int count = LOGOS_CMOCK_RETURN(int, "pow_claimable_rewards_count");
+        if (count > 4) count = 4;
+        for (int i = 0; i < count; ++i) {
+            s_mockSlotsUntilExpiry[i] = static_cast<uint64_t>(100 + i);
+        }
+        result.value.claimable_tickets = static_cast<size_t>(count);
+        result.value.slots_until_expiry = s_mockSlotsUntilExpiry;
+        result.value.len = static_cast<size_t>(count);
+    } else {
+        result.value.claimable_tickets = 0;
+        result.value.slots_until_expiry = nullptr;
+        result.value.len = 0;
+    }
+    return result;
+}
+
+OperationStatus free_pow_claimable_rewards(PoWClaimableRewards rewards) {
+    LOGOS_CMOCK_RECORD("free_pow_claimable_rewards");
+    return make_status(0);
+}
+
 OperationStatus free_cstring(char* s) {
     LOGOS_CMOCK_RECORD("free_cstring");
     free(s);

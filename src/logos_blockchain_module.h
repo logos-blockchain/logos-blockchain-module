@@ -164,6 +164,17 @@ public:
     //   { slot_duration_ms, genesis_time_unix_ms, current_slot, current_epoch }
     [[nodiscard]] StdLogosResult get_time_info() const;
 
+    // PoW
+    // Mining is a fire-and-forget toggle that the node does not persist, so a
+    // restart clears it.
+    [[nodiscard]] StdLogosResult pow_start_mining() const;
+    [[nodiscard]] StdLogosResult pow_stop_mining() const;
+    // Claims the rewards for the mined tickets, returning the transaction hash.
+    [[nodiscard]] StdLogosResult pow_claim() const;
+    // Rewards this node can currently claim, as JSON:
+    //   { claimable_tickets, slots_until_expiry: [ ... ] }
+    [[nodiscard]] StdLogosResult pow_claimable_rewards() const;
+
     // clang-format off
 // Clang-format only handles public/private/protected, so it miss-indents this section.
 // Guard kept until https://github.com/llvm/llvm-project/issues/64763 lands.
