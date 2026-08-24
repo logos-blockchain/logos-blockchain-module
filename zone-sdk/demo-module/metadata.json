@@ -1,0 +1,29 @@
+{
+  "name": "demo_module",
+  "version": "0.1.0",
+  "description": "Demo module for testing logos-rust-sdk IPC",
+  "author": "Logos Core Team",
+  "type": "core",
+  "interface": "cdylib",
+  "category": "general",
+  "main": "demo_module_plugin",
+  "dependencies": ["blockchain_module"],
+  "include": [],
+  "capabilities": [],
+
+  "codegen": {
+    "lidl": "rust-lib/demo_module.lidl"
+  },
+
+  "nix": {
+    "external_libraries": [],
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "cmake": {
+      "find_packages": [],
+      "extra_include_dirs": []
+    }
+  }
+}
