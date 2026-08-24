@@ -251,6 +251,7 @@ BlendHashResult blend_join_as_core_node(
     LogosBlockchainNode* node,
     const char* locator,
     const uint8_t* locked_note_id);
+StringResult blend_info(LogosBlockchainNode* node);
 
 // Explorer
 StringResult get_block(LogosBlockchainNode* node, const HeaderId* header_id);

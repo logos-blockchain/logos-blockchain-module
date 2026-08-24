@@ -332,6 +332,15 @@ BlendHashResult blend_join_as_core_node(
     return result;
 }
 
+StringResult blend_info(LogosBlockchainNode* node) {
+    LOGOS_CMOCK_RECORD("blend_info");
+    StringResult result;
+    const char* json = LOGOS_CMOCK_RETURN_STRING("blend_info");
+    result.value = json ? strdup(json) : nullptr;
+    result.error = make_status(LOGOS_CMOCK_RETURN(int, "blend_info_error"));
+    return result;
+}
+
 StringResult get_block(LogosBlockchainNode* node, const HeaderId* header_id) {
     LOGOS_CMOCK_RECORD("get_block");
     StringResult result;
