@@ -225,6 +225,156 @@ LOGOS_TEST(generate_user_config_with_all_fields) {
 }
 
 // ============================================================================
+// State management — does_state_exist / purge_state
+// ============================================================================
+
+// Writes `content` to `path`, creating the parent directories.
+static void writeFile(const fs::path& path, const std::string& content) {
+    fs::create_directories(path.parent_path());
+    FILE* f = fopen(path.string().c_str(), "wb");
+    if (f) {
+        fwrite(content.data(), 1, content.size(), f);
+        fclose(f);
+    }
+}
+
+LOGOS_TEST(does_state_exist_tracks_the_routed_directory) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    LOGOS_ASSERT_TRUE(tmpDir.isValid());
+
+    LogosBlockchainModule module;
+    module._logosCoreSetContext_("/mod", "id", tmpDir.path.string());
+
+    StdLogosResult before = module.does_state_exist();
+    LOGOS_ASSERT_TRUE(before.success);
+    LOGOS_ASSERT_FALSE(before.value.get<bool>());
+
+    // The directory generate_user_config hands the node.
+    writeFile(tmpDir.path / "state" / "chain.bin", "chain-state");
+
+    StdLogosResult after = module.does_state_exist();
+    LOGOS_ASSERT_TRUE(after.success);
+    LOGOS_ASSERT_TRUE(after.value.get<bool>());
+}
+
+// Nothing was laid out by the module, so there is no directory to report on.
+LOGOS_TEST(does_state_exist_errors_without_a_persistence_path) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+
+    StdLogosResult result = module.does_state_exist();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "persistence path"));
+}
+
+// The config and keystore stay, so the node keeps its identity and resyncs.
+LOGOS_TEST(purge_state_removes_the_state_directory_only) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    LOGOS_ASSERT_TRUE(tmpDir.isValid());
+
+    LogosBlockchainModule module;
+    module._logosCoreSetContext_("/mod", "id", tmpDir.path.string());
+    writeFile(tmpDir.path / "state" / "chain.bin", "chain-state");
+    writeFile(tmpDir.path / "state" / "blocks" / "000001.sst", "nested");
+    // The other two directories generate_user_config routes, plus the config.
+    writeFile(tmpDir.path / "db" / "blocks.db", "db");
+    writeFile(tmpDir.path / "logs" / "node.log", "log");
+    writeFile(tmpDir.path / "user_config.yaml", "config: yes");
+
+    LOGOS_ASSERT_TRUE(module.purge_state().success);
+
+    LOGOS_ASSERT_FALSE(fs::exists(tmpDir.path / "state"));
+    LOGOS_ASSERT_TRUE(fs::exists(tmpDir.path / "db" / "blocks.db"));
+    LOGOS_ASSERT_TRUE(fs::exists(tmpDir.path / "logs" / "node.log"));
+    LOGOS_ASSERT_TRUE(fs::exists(tmpDir.path / "user_config.yaml"));
+}
+
+// Purging an instance that never ran is a no-op, not an error.
+LOGOS_TEST(purge_state_succeeds_when_there_is_nothing_to_remove) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    LOGOS_ASSERT_TRUE(tmpDir.isValid());
+
+    LogosBlockchainModule module;
+    module._logosCoreSetContext_("/mod", "id", tmpDir.path.string());
+
+    LOGOS_ASSERT_TRUE(module.purge_state().success);
+}
+
+LOGOS_TEST(purge_state_refuses_while_the_node_is_running) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    LOGOS_ASSERT_TRUE(tmpDir.isValid());
+
+    LogosBlockchainModule* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT(module != nullptr);
+    module->_logosCoreSetContext_("/mod", "id", tmpDir.path.string());
+    writeFile(tmpDir.path / "state" / "chain.bin", "chain-state");
+
+    StdLogosResult result = module->purge_state();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "Stop it before purging"));
+    LOGOS_ASSERT_TRUE(fs::exists(tmpDir.path / "state"));
+
+    delete module;
+}
+
+// The drift guard: whatever path generate_user_config hands the node is the one
+// purge_state removes.
+LOGOS_TEST(purge_state_removes_the_path_generate_user_config_routes_to) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    LOGOS_ASSERT_TRUE(tmpDir.isValid());
+
+    LogosBlockchainModule module;
+    module._logosCoreSetContext_("/mod", "id", tmpDir.path.string());
+
+    t.mockCFunction("generate_user_config").returns(0);
+    clearGeneratedPaths();
+    LOGOS_ASSERT_TRUE(module.generate_user_config(R"({"use_persistence_paths":true})").success);
+
+    writeFile(fs::path(g_lastGeneratedStatePath) / "chain.bin", "chain-state");
+    LOGOS_ASSERT_TRUE(module.does_state_exist().value.get<bool>());
+
+    LOGOS_ASSERT_TRUE(module.purge_state().success);
+    LOGOS_ASSERT_FALSE(fs::exists(g_lastGeneratedStatePath));
+}
+
+// An unreadable directory is reported, not folded into "no state".
+LOGOS_TEST(does_state_exist_errors_when_the_directory_cannot_be_read) {
+    auto t = LogosTestContext("blockchain_module");
+    if (geteuid() == 0) {
+        return; // root ignores the permission bits this relies on
+    }
+
+    TempDir tmpDir;
+    LOGOS_ASSERT_TRUE(tmpDir.isValid());
+    const fs::path instance = tmpDir.path / "instance";
+    fs::create_directories(instance / "state");
+
+    LogosBlockchainModule module;
+    module._logosCoreSetContext_("/mod", "id", instance.string());
+    fs::permissions(instance, fs::perms::none);
+
+    StdLogosResult result = module.does_state_exist();
+    fs::permissions(instance, fs::perms::owner_all); // let TempDir clean up
+
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "Failed to check"));
+}
+
+LOGOS_TEST(purge_state_requires_a_persistence_path) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+
+    StdLogosResult result = module.purge_state();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "persistence path"));
+}
+
+// ============================================================================
 // No-node error paths — all methods should fail gracefully
 // ============================================================================
 

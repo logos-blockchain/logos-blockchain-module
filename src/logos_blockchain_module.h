@@ -25,6 +25,22 @@ public:
     [[nodiscard]] StdLogosResult start(const std::string& config_path, const std::string& deployment);
     [[nodiscard]] StdLogosResult stop();
 
+    // State management
+
+    // Whether the node has state on disk.
+    //
+    // # Returns
+    //
+    // A JSON boolean. Errors when this instance has no persistence path, or the
+    // directory cannot be read.
+    [[nodiscard]] StdLogosResult does_state_exist() const;
+
+    // Removes the state directory
+    //
+    // Succeeds when there is nothing to remove.
+    // Refuses while the node is running.
+    [[nodiscard]] StdLogosResult purge_state() const;
+
     // Config management
     // Not static: when the JSON args set "use_persistence_paths": true it routes
     // the node's output/state/storage/logs paths under instancePersistencePath()
