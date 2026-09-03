@@ -148,6 +148,7 @@ public:
         const std::string& locator,
         const std::string& locked_note_id_hex
     ) const;
+    [[nodiscard]] StdLogosResult blend_info() const;
 
     // Explorer
     [[nodiscard]] StdLogosResult get_block(const std::string& header_id_hex) const;

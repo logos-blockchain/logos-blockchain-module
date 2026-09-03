@@ -297,6 +297,14 @@ LOGOS_TEST(blend_join_as_core_node_without_node_returns_error) {
     LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
 }
 
+LOGOS_TEST(blend_info_without_node_returns_error) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+    StdLogosResult result = module.blend_info();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
+}
+
 LOGOS_TEST(get_block_without_node_returns_error) {
     auto t = LogosTestContext("blockchain_module");
     LogosBlockchainModule module;
@@ -1276,6 +1284,53 @@ LOGOS_TEST(blend_join_as_core_node_returns_error_on_ffi_failure) {
 
     StdLogosResult result = module->blend_join_as_core_node("locator1", VALID_HEX);
     LOGOS_ASSERT_FALSE(result.success);
+    delete module;
+}
+
+LOGOS_TEST(blend_info_returns_json_on_success) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("blend_info").returns(R"({"membership_size":3})");
+    t.mockCFunction("blend_info_error").returns(0);
+
+    StdLogosResult result = module->blend_info();
+    LOGOS_ASSERT_TRUE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.value.get<std::string>(), "membership_size"));
+    LOGOS_ASSERT(t.cFunctionCalled("blend_info"));
+    LOGOS_ASSERT(t.cFunctionCalled("free_cstring"));
+    delete module;
+}
+
+LOGOS_TEST(blend_info_returns_null_when_not_joined) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    // The node serializes `None` as JSON null when it has not joined as a core node.
+    t.mockCFunction("blend_info").returns("null");
+    t.mockCFunction("blend_info_error").returns(0);
+
+    StdLogosResult result = module->blend_info();
+    LOGOS_ASSERT_TRUE(result.success);
+    LOGOS_ASSERT_EQ(result.value.get<std::string>(), std::string("null"));
+    delete module;
+}
+
+LOGOS_TEST(blend_info_returns_error_on_ffi_failure) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("blend_info_error").returns(1);
+
+    StdLogosResult result = module->blend_info();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "mock error"));
     delete module;
 }
 
