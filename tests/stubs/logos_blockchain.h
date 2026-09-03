@@ -143,6 +143,12 @@ typedef struct {
 
 // Time service info
 typedef struct {
+    size_t claimable_tickets;
+    uint64_t* slots_until_expiry;
+    size_t len;
+} PoWClaimableRewards;
+
+typedef struct {
     uint64_t slot_duration_ms;
     int64_t genesis_time_unix_ms;
     uint64_t current_slot;
@@ -163,6 +169,8 @@ typedef struct { char* value; OperationStatus error; } StringResult;
 typedef struct { CryptarchiaInfo* value; OperationStatus error; } CryptarchiaInfoResult;
 typedef struct { TimeInfo* value; OperationStatus error; } TimeInfoResult;
 typedef struct { Hash value; OperationStatus error; } SubmitTransactionResult;
+typedef struct { Hash value; OperationStatus error; } FfiPoWClaimResult;
+typedef struct { PoWClaimableRewards value; OperationStatus error; } FfiPoWClaimableRewardsResult;
 
 // Block event callback
 typedef void (*BlockCallback)(const char* block_json);
@@ -259,6 +267,14 @@ TimeInfoResult get_time_info(LogosBlockchainNode* node);
 OperationStatus free_time_info(TimeInfo* info);
 
 // Memory management
+OperationStatus pow_start_mining(LogosBlockchainNode* node);
+OperationStatus pow_stop_mining(LogosBlockchainNode* node);
+OperationStatus pow_start_auto_claim(LogosBlockchainNode* node);
+OperationStatus pow_stop_auto_claim(LogosBlockchainNode* node);
+FfiPoWClaimResult pow_claim(LogosBlockchainNode* node, const uint8_t* claim_address);
+FfiPoWClaimableRewardsResult pow_claimable_rewards(LogosBlockchainNode* node);
+OperationStatus free_pow_claimable_rewards(PoWClaimableRewards rewards);
+
 OperationStatus free_cstring(char* s);
 
 #ifdef __cplusplus

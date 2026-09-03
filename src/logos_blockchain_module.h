@@ -164,6 +164,25 @@ public:
     //   { slot_duration_ms, genesis_time_unix_ms, current_slot, current_epoch }
     [[nodiscard]] StdLogosResult get_time_info() const;
 
+    // PoW
+    // Mining is a fire-and-forget toggle that the node does not persist, so a
+    // restart clears it.
+    [[nodiscard]] StdLogosResult pow_start_mining() const;
+    [[nodiscard]] StdLogosResult pow_stop_mining() const;
+    // Unattended claiming: the node claims mined rewards on its own. Like
+    // mining, this is a fire-and-forget toggle that the node does not persist.
+    // Manual pow_claim keeps working while auto-claim is off.
+    [[nodiscard]] StdLogosResult pow_start_auto_claim() const;
+    [[nodiscard]] StdLogosResult pow_stop_auto_claim() const;
+    // Claims the rewards for the mined tickets, returning the transaction hash.
+    // claim_address_hex is the 32-byte public key the rewards are paid to; it
+    // may be empty to pay whichever auto-claim target is currently furthest
+    // below its threshold.
+    [[nodiscard]] StdLogosResult pow_claim(const std::string& claim_address_hex) const;
+    // Rewards this node can currently claim, as JSON:
+    //   { claimable_tickets, slots_until_expiry: [ ... ] }
+    [[nodiscard]] StdLogosResult pow_claimable_rewards() const;
+
     // clang-format off
 // Clang-format only handles public/private/protected, so it miss-indents this section.
 // Guard kept until https://github.com/llvm/llvm-project/issues/64763 lands.

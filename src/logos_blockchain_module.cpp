@@ -1212,3 +1212,91 @@ StdLogosResult LogosBlockchainModule::get_time_info() const {
     }
     return result::ok(obj.dump());
 }
+
+// PoW
+
+StdLogosResult LogosBlockchainModule::pow_start_mining() const {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+
+    OperationStatus status = ::pow_start_mining(node);
+    return result::from_operation_status(status);
+}
+
+StdLogosResult LogosBlockchainModule::pow_stop_mining() const {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+
+    OperationStatus status = ::pow_stop_mining(node);
+    return result::from_operation_status(status);
+}
+
+StdLogosResult LogosBlockchainModule::pow_start_auto_claim() const {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+
+    OperationStatus status = ::pow_start_auto_claim(node);
+    return result::from_operation_status(status);
+}
+
+StdLogosResult LogosBlockchainModule::pow_stop_auto_claim() const {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+
+    OperationStatus status = ::pow_stop_auto_claim(node);
+    return result::from_operation_status(status);
+}
+
+StdLogosResult LogosBlockchainModule::pow_claim(const std::string& claim_address_hex) const {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+
+    // A null claim address pays out to whichever auto-claim target is furthest below its threshold.
+    std::vector<uint8_t> claim_address_bytes;
+    const uint8_t* claim_address = nullptr;
+    if (!claim_address_hex.empty()) {
+        claim_address_bytes = parse_address_hex(claim_address_hex);
+        if (static_cast<int>(claim_address_bytes.size()) != ADDRESS_BYTES) {
+            return result::err("Invalid claim address (64 hex characters or empty).");
+        }
+        claim_address = claim_address_bytes.data();
+    }
+
+    auto [value, error] = ::pow_claim(node, claim_address);
+    if (!is_ok(&error)) {
+        return result::err(operation_status::take_message(error));
+    }
+
+    return result::ok(bytes_to_hex(reinterpret_cast<const uint8_t*>(&value), TX_HASH_BYTES));
+}
+
+StdLogosResult LogosBlockchainModule::pow_claimable_rewards() const {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+
+    auto [value, error] = ::pow_claimable_rewards(node);
+    if (!is_ok(&error)) {
+        return result::err(operation_status::take_message(error));
+    }
+
+    json obj;
+    obj["claimable_tickets"] = static_cast<int64_t>(value.claimable_tickets);
+    obj["slots_until_expiry"] = json::array();
+    for (size_t i = 0; i < value.len; ++i) {
+        obj["slots_until_expiry"].push_back(static_cast<int64_t>(value.slots_until_expiry[i]));
+    }
+
+    OperationStatus free_status = free_pow_claimable_rewards(value);
+    if (!is_ok(&free_status)) {
+        fprintf(
+            stderr, "Failed to free PoW claimable rewards: %s\n", operation_status::take_message(free_status).c_str()
+        );
+    }
+    return result::ok(obj.dump());
+}
