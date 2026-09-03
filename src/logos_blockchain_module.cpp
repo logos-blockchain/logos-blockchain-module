@@ -1233,12 +1233,23 @@ StdLogosResult LogosBlockchainModule::pow_stop_mining() const {
     return result::from_operation_status(status);
 }
 
-StdLogosResult LogosBlockchainModule::pow_claim() const {
+StdLogosResult LogosBlockchainModule::pow_claim(const std::string& claim_address_hex) const {
     if (!node) {
         return result::err("The node is not running.");
     }
 
-    auto [value, error] = ::pow_claim(node);
+    // A null claim address pays out to whichever auto-claim target is furthest below its threshold.
+    std::vector<uint8_t> claim_address_bytes;
+    const uint8_t* claim_address = nullptr;
+    if (!claim_address_hex.empty()) {
+        claim_address_bytes = parse_address_hex(claim_address_hex);
+        if (static_cast<int>(claim_address_bytes.size()) != ADDRESS_BYTES) {
+            return result::err("Invalid claim address (64 hex characters or empty).");
+        }
+        claim_address = claim_address_bytes.data();
+    }
+
+    auto [value, error] = ::pow_claim(node, claim_address);
     if (!is_ok(&error)) {
         return result::err(operation_status::take_message(error));
     }

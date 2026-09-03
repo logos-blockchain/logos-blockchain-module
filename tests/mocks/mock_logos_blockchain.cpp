@@ -16,6 +16,11 @@ std::string g_lastGeneratedStatePath;
 std::string g_lastGeneratedStoragePath;
 std::string g_lastGeneratedLogsPath;
 
+// Captures the raw claim address passed to the most recent pow_claim call so
+// tests can assert the module forwards it. A null pointer is recorded as the
+// sentinel "<null>".
+std::string g_lastPowClaimAddress;
+
 // Captures the callbacks passed to the subscription calls so tests can drive
 // the streams (including the NULL end-of-stream sentinel).
 BlockCallback g_lastNewBlockCallback = nullptr;
@@ -412,8 +417,13 @@ OperationStatus pow_stop_mining(LogosBlockchainNode* node) {
     return make_status(LOGOS_CMOCK_RETURN(int, "pow_stop_mining_error"));
 }
 
-FfiPoWClaimResult pow_claim(LogosBlockchainNode* node) {
+FfiPoWClaimResult pow_claim(LogosBlockchainNode* node, const uint8_t* claim_address) {
     LOGOS_CMOCK_RECORD("pow_claim");
+    if (claim_address) {
+        g_lastPowClaimAddress.assign(claim_address, claim_address + sizeof(Hash));
+    } else {
+        g_lastPowClaimAddress = "<null>";
+    }
     FfiPoWClaimResult result;
     memset(result.value, 0xCD, sizeof(Hash));
     result.error = make_status(LOGOS_CMOCK_RETURN(int, "pow_claim_error"));

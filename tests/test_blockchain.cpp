@@ -352,7 +352,7 @@ LOGOS_TEST(pow_stop_mining_without_node_returns_error) {
 LOGOS_TEST(pow_claim_without_node_returns_error) {
     auto t = LogosTestContext("blockchain_module");
     LogosBlockchainModule module;
-    StdLogosResult result = module.pow_claim();
+    StdLogosResult result = module.pow_claim("");
     LOGOS_ASSERT_FALSE(result.success);
     LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
 }
@@ -1553,13 +1553,61 @@ LOGOS_TEST(pow_claim_returns_tx_hash_on_success) {
 
     t.mockCFunction("pow_claim_error").returns(0);
 
-    StdLogosResult result = module->pow_claim();
+    StdLogosResult result = module->pow_claim("");
     LOGOS_ASSERT_TRUE(result.success);
     // Mock fills the hash with 0xCD -> hex "cdcd...cd".
     std::string hash = result.value.get<std::string>();
     LOGOS_ASSERT_EQ(static_cast<int>(hash.length()), 64);
     LOGOS_ASSERT_TRUE(hash.substr(0, 2) == "cd");
     LOGOS_ASSERT(t.cFunctionCalled("pow_claim"));
+    delete module;
+}
+
+// The mock records the claim address handed to the FFI (see mock_logos_blockchain.cpp).
+extern std::string g_lastPowClaimAddress;
+
+LOGOS_TEST(pow_claim_with_empty_address_passes_null) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("pow_claim_error").returns(0);
+    g_lastPowClaimAddress.clear();
+
+    LOGOS_ASSERT_TRUE(module->pow_claim("").success);
+    LOGOS_ASSERT_EQ(g_lastPowClaimAddress, std::string("<null>"));
+    delete module;
+}
+
+LOGOS_TEST(pow_claim_forwards_claim_address) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("pow_claim_error").returns(0);
+    g_lastPowClaimAddress.clear();
+
+    LOGOS_ASSERT_TRUE(module->pow_claim(std::string(64, 'a')).success);
+    LOGOS_ASSERT_EQ(g_lastPowClaimAddress, std::string(32, static_cast<char>(0xAA)));
+    delete module;
+}
+
+LOGOS_TEST(pow_claim_rejects_invalid_claim_address) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("pow_claim_error").returns(0);
+    g_lastPowClaimAddress.clear();
+
+    StdLogosResult result = module->pow_claim("deadbeef");
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "Invalid claim address"));
+    // The FFI must not be reached when the address fails to parse.
+    LOGOS_ASSERT_TRUE(g_lastPowClaimAddress.empty());
     delete module;
 }
 
@@ -1571,7 +1619,7 @@ LOGOS_TEST(pow_claim_returns_error_on_ffi_failure) {
 
     t.mockCFunction("pow_claim_error").returns(1);
 
-    StdLogosResult result = module->pow_claim();
+    StdLogosResult result = module->pow_claim("");
     LOGOS_ASSERT_FALSE(result.success);
     LOGOS_ASSERT_TRUE(contains(result.error, "mock error"));
     delete module;

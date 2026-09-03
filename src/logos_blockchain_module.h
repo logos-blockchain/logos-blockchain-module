@@ -170,7 +170,10 @@ public:
     [[nodiscard]] StdLogosResult pow_start_mining() const;
     [[nodiscard]] StdLogosResult pow_stop_mining() const;
     // Claims the rewards for the mined tickets, returning the transaction hash.
-    [[nodiscard]] StdLogosResult pow_claim() const;
+    // claim_address_hex is the 32-byte public key the rewards are paid to; it
+    // may be empty to pay whichever auto-claim target is currently furthest
+    // below its threshold.
+    [[nodiscard]] StdLogosResult pow_claim(const std::string& claim_address_hex) const;
     // Rewards this node can currently claim, as JSON:
     //   { claimable_tickets, slots_until_expiry: [ ... ] }
     [[nodiscard]] StdLogosResult pow_claimable_rewards() const;
