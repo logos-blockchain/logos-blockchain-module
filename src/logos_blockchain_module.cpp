@@ -131,6 +131,16 @@ namespace {
         return false;
     }
 
+    constexpr auto STATE_DIR = "state";
+
+    // Path to the node's state persistence directory
+    //
+    // This is not authoritative, just expected.
+    // The true authoritative path is the one set in the config.
+    fs::path state_dir(const std::string& persistence_path) {
+        return fs::path(persistence_path) / STATE_DIR;
+    }
+
     // Wrapper that owns data and provides GenerateConfigArgs
     struct OwnedGenerateConfigArgs {
         std::vector<std::string> initial_peers_data;
@@ -353,7 +363,7 @@ StdLogosResult LogosBlockchainModule::generate_user_config(const std::string& js
                 if (!provided)
                     parsed_args[key] = value;
             };
-            set_if_absent("state_path", (base / "state").string());
+            set_if_absent("state_path", state_dir(persistence).string());
             set_if_absent("storage_path", (base / "db").string());
             set_if_absent("logs_path", (base / "logs").string());
 
@@ -469,6 +479,47 @@ StdLogosResult LogosBlockchainModule::stop() {
     }
 
     node = nullptr;
+    return result::ok();
+}
+
+// State management
+
+StdLogosResult LogosBlockchainModule::does_state_exist() const {
+    const std::string& persistence_path = instancePersistencePath();
+    if (persistence_path.empty()) {
+        return result::err("This instance has no persistence path, so the module laid out no state directory.");
+    }
+
+    const fs::path state_path = state_dir(persistence_path);
+
+    std::error_code error_code;
+    const bool does_exist = fs::exists(state_path, error_code);
+    if (error_code) {
+        return result::err("Failed to check " + state_path.string() + ": " + error_code.message());
+    }
+
+    return result::ok(does_exist);
+}
+
+StdLogosResult LogosBlockchainModule::purge_state() const {
+    if (node) {
+        fprintf(stderr, "Could not purge state: the node is running.\n");
+        return result::err("The node is running. Stop it before purging state.");
+    }
+
+    const std::string& persistence_path = instancePersistencePath();
+    if (persistence_path.empty()) {
+        return result::err("This instance has no persistence path, so the module laid out no state directory.");
+    }
+
+    const fs::path state_path = state_dir(persistence_path);
+    std::error_code error_code;
+    fs::remove_all(state_path, error_code);
+    if (error_code) {
+        fprintf(stderr, "Failed to purge %s: %s\n", state_path.string().c_str(), error_code.message().c_str());
+        return result::err("Failed to remove " + state_path.string() + ": " + error_code.message());
+    }
+
     return result::ok();
 }
 
