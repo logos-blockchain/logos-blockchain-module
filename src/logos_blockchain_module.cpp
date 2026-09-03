@@ -1233,6 +1233,24 @@ StdLogosResult LogosBlockchainModule::pow_stop_mining() const {
     return result::from_operation_status(status);
 }
 
+StdLogosResult LogosBlockchainModule::pow_start_auto_claim() const {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+
+    OperationStatus status = ::pow_start_auto_claim(node);
+    return result::from_operation_status(status);
+}
+
+StdLogosResult LogosBlockchainModule::pow_stop_auto_claim() const {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+
+    OperationStatus status = ::pow_stop_auto_claim(node);
+    return result::from_operation_status(status);
+}
+
 StdLogosResult LogosBlockchainModule::pow_claim(const std::string& claim_address_hex) const {
     if (!node) {
         return result::err("The node is not running.");

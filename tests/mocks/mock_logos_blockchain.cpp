@@ -417,6 +417,16 @@ OperationStatus pow_stop_mining(LogosBlockchainNode* node) {
     return make_status(LOGOS_CMOCK_RETURN(int, "pow_stop_mining_error"));
 }
 
+OperationStatus pow_start_auto_claim(LogosBlockchainNode* node) {
+    LOGOS_CMOCK_RECORD("pow_start_auto_claim");
+    return make_status(LOGOS_CMOCK_RETURN(int, "pow_start_auto_claim_error"));
+}
+
+OperationStatus pow_stop_auto_claim(LogosBlockchainNode* node) {
+    LOGOS_CMOCK_RECORD("pow_stop_auto_claim");
+    return make_status(LOGOS_CMOCK_RETURN(int, "pow_stop_auto_claim_error"));
+}
+
 FfiPoWClaimResult pow_claim(LogosBlockchainNode* node, const uint8_t* claim_address) {
     LOGOS_CMOCK_RECORD("pow_claim");
     if (claim_address) {

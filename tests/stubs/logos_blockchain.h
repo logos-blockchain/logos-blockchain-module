@@ -269,6 +269,8 @@ OperationStatus free_time_info(TimeInfo* info);
 // Memory management
 OperationStatus pow_start_mining(LogosBlockchainNode* node);
 OperationStatus pow_stop_mining(LogosBlockchainNode* node);
+OperationStatus pow_start_auto_claim(LogosBlockchainNode* node);
+OperationStatus pow_stop_auto_claim(LogosBlockchainNode* node);
 FfiPoWClaimResult pow_claim(LogosBlockchainNode* node, const uint8_t* claim_address);
 FfiPoWClaimableRewardsResult pow_claimable_rewards(LogosBlockchainNode* node);
 OperationStatus free_pow_claimable_rewards(PoWClaimableRewards rewards);

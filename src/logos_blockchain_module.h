@@ -169,6 +169,11 @@ public:
     // restart clears it.
     [[nodiscard]] StdLogosResult pow_start_mining() const;
     [[nodiscard]] StdLogosResult pow_stop_mining() const;
+    // Unattended claiming: the node claims mined rewards on its own. Like
+    // mining, this is a fire-and-forget toggle that the node does not persist.
+    // Manual pow_claim keeps working while auto-claim is off.
+    [[nodiscard]] StdLogosResult pow_start_auto_claim() const;
+    [[nodiscard]] StdLogosResult pow_stop_auto_claim() const;
     // Claims the rewards for the mined tickets, returning the transaction hash.
     // claim_address_hex is the 32-byte public key the rewards are paid to; it
     // may be empty to pay whichever auto-claim target is currently furthest
