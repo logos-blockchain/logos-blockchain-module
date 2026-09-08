@@ -17,12 +17,6 @@ let info = chain.get_cryptarchia_info()?;   // serde_json::Value
 let sub = chain.on_processed_block()?;      // EventSubscription
 ```
 
-Each contract method has a sync and an `_async` form; each event has `on_<event>()` and
-`decode_<event>()`. Replies are the module's raw JSON (`{success, value, error}`).
-
-The client speaks the logos-protocol `lp_*` ABI, so it runs inside a Logos module loaded by
-the same host as `blockchain_module`, which the module lists in its `dependencies`.
-
 ## Example
 
 [`example/`](example/) is a module that polls the chain height every 5 s. From the repo root:
@@ -37,6 +31,9 @@ logoscore call blockchain_client_example last_height
 ```
 
 Without nix: `cargo build --release --manifest-path example/rust-lib/Cargo.toml`.
+
+[`example-cargo/`](example-cargo/) is the cargo-only shape of a consumer: a library using the
+client, built and tested with `cargo test --manifest-path example-cargo/Cargo.toml`.
 
 ## Regenerating
 
