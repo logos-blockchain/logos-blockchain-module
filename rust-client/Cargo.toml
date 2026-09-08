@@ -10,10 +10,6 @@ repository = "https://github.com/logos-blockchain/logos-blockchain-module"
 name = "logos_blockchain_client"
 path = "src/lib.rs"
 
-# Ignore parent workspace
-[workspace]
-
 [dependencies]
-# Same rev logos-module-builder runs logos-lidl-gen from (flake.lock); consumers must pin the same source.
 logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "a55fdac1a202ff2a4cf9d562a263ab41db17d99f" }
 serde_json = "1"

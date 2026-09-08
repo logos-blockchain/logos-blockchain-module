@@ -70,9 +70,9 @@
             mkdir -p $out
             cp -r ${./rust-client} $out/rust-client
           '';
-          sourceRoot = "blockchain-client-example-src/rust-client/example/rust-lib";
+          sourceRoot = "blockchain-client-example-src/rust-client/example-module/rust-lib";
           cargoLock = {
-            lockFile = ./rust-client/example/rust-lib/Cargo.lock;
+            lockFile = ./rust-client/example-module/rust-lib/Cargo.lock;
             allowBuiltinFetchGit = true;
           };
           doCheck = false;
@@ -80,8 +80,8 @@
 
       mkExampleModule = { pkgs }:
         logos-module-builder.lib.mkLogosModule {
-          src = ./rust-client/example;
-          configFile = ./rust-client/example/metadata.json;
+          src = ./rust-client/example-module;
+          configFile = ./rust-client/example-module/metadata.json;
           flakeInputs = { blockchain_module = self; } // inputs;
           preConfigure = ''
             mkdir -p lib
@@ -122,12 +122,12 @@
               logos-lidl-gen "$root/blockchain_module.lidl" \
                 -o "$root/rust-client/src/generated.rs"
 
-              echo "rust-client/example/rust-lib/src/provider_gen.rs <- logos-lidl-gen --provider (protocol ${protocolVersion})"
-              logos-lidl-gen "$root/rust-client/example/rust-lib/blockchain_client_example.lidl" \
+              echo "rust-client/example-module/rust-lib/src/provider_gen.rs <- logos-lidl-gen --provider (protocol ${protocolVersion})"
+              logos-lidl-gen "$root/rust-client/example-module/rust-lib/blockchain_client_example.lidl" \
                 --provider --protocol-version "${protocolVersion}" \
-                -o "$root/rust-client/example/rust-lib/src/provider_gen.rs"
+                -o "$root/rust-client/example-module/rust-lib/src/provider_gen.rs"
 
-              for manifest in rust-client/Cargo.toml rust-client/example/rust-lib/Cargo.toml; do
+              for manifest in rust-client/Cargo.toml rust-client/example-module/rust-lib/Cargo.toml; do
                 if ! grep -q 'rev = "${rustSdkRev}"' "$root/$manifest"; then
                   echo "WARNING: $manifest does not pin logos-rust-sdk rev ${rustSdkRev} (the builder's pin); update it." >&2
                 fi
