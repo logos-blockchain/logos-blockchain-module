@@ -1,0 +1,21 @@
+[package]
+name = "logos-blockchain-zone-sdk-module-backend"
+version = "0.0.999"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Zone SDK backend (adapter::Node) that talks to blockchain_module through logos-blockchain-client instead of HTTP"
+repository = "https://github.com/logos-blockchain/logos-blockchain-module"
+
+[lib]
+name = "logos_blockchain_zone_sdk_module_backend"
+path = "src/lib.rs"
+
+[dependencies]
+logos-blockchain-zone-sdk = { git = "https://github.com/logos-blockchain/logos-blockchain.git", rev = "6ddfc0b26" }
+logos-blockchain-client = { path = "../rust-client" }
+logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "a55fdac1a202ff2a4cf9d562a263ab41db17d99f" }
+
+async-trait = "0.1"
+futures = "0.3"
+tokio = { version = "1", default-features = false, features = ["sync"] }
+tracing = "0.1"
