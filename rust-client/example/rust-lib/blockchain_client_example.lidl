@@ -1,0 +1,11 @@
+module blockchain_client_example {
+  version "0.0.999"
+  description "Example Rust module that polls blockchain_module's cryptarchia height every 5 seconds through the generated logos-blockchain-client crate."
+  depends [blockchain_module]
+
+  method last_height() -> int description "Chain height from the most recent successful poll, or -1 if none has succeeded yet."
+  method poll_count() -> int description "Number of polls attempted since the module was loaded."
+  method last_info() -> tstr description "Raw JSON of the most recent successful get_cryptarchia_info reply, or empty."
+  method last_error() -> tstr description "Error text of the most recent failed poll, or empty if the last poll succeeded."
+  method poll_now() -> int description "Polls once, synchronously, and returns the height (or -1 on failure)."
+}
