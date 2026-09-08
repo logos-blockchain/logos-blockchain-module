@@ -1,0 +1,18 @@
+[package]
+name = "blockchain_client_example"
+version = "0.0.999"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Example Logos module: polls blockchain_module's chain height through logos-blockchain-client"
+
+[lib]
+crate-type = ["staticlib"]
+
+# Ignore parent workspace
+[workspace]
+
+[dependencies]
+logos-blockchain-client = { path = "../.." }
+# Must match the client's pin so cargo unifies the SDK.
+logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "a55fdac1a202ff2a4cf9d562a263ab41db17d99f" }
+serde_json = "1"
