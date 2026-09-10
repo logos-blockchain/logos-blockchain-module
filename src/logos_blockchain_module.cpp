@@ -1084,6 +1084,10 @@ StdLogosResult LogosBlockchainModule::wallet_get_claimable_vouchers() const {
         });
     }
 
+    // Value is u64; serialized as a string to avoid JSON number precision loss.
+    obj["reward_amount"] = std::to_string(value.reward_amount);
+    obj["total_claimable"] = std::to_string(value.total_claimable);
+
     OperationStatus free_status = free_claimable_vouchers(value);
     if (!is_ok(&free_status)) {
         fprintf(stderr, "Failed to free claimable vouchers: %s\n", operation_status::take_message(free_status).c_str());

@@ -229,10 +229,14 @@ FfiClaimableVouchersResult get_claimable_vouchers(LogosBlockchainNode* node, con
         }
         result.value.vouchers = s_mockClaimableVouchers;
         result.value.len = static_cast<size_t>(count);
+        result.value.reward_amount = static_cast<uint64_t>(LOGOS_CMOCK_RETURN(int, "claimable_vouchers_reward_amount"));
+        result.value.total_claimable = result.value.reward_amount * static_cast<uint64_t>(count);
     } else {
         memset(result.value.tip, 0, sizeof(HeaderId));
         result.value.vouchers = nullptr;
         result.value.len = 0;
+        result.value.reward_amount = 0;
+        result.value.total_claimable = 0;
     }
     return result;
 }

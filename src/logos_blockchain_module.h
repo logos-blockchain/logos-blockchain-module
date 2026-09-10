@@ -122,6 +122,13 @@ public:
     // current tip.
     [[nodiscard]] StdLogosResult wallet_get_leader_aged_notes(const std::string& optional_tip_hex) const;
     [[nodiscard]] StdLogosResult leader_claim() const;
+    // Leader vouchers this wallet can claim, as a JSON string:
+    //   { "tip": "<hex>", "reward_amount": "<u64>", "total_claimable": "<u64>",
+    //     "vouchers": [ { "commitment": "<hex>", "nullifier": "<hex>" }, ... ] }
+    // reward_amount is what a single voucher pays out at tip (the pool is split
+    // evenly across all unclaimed vouchers, so it moves as other leaders
+    // claim); total_claimable is reward_amount times the number of vouchers.
+    // Both are snapshots at tip, not a guarantee of what a claim settles for.
     [[nodiscard]] StdLogosResult wallet_get_claimable_vouchers() const;
     // Funds an unsigned transaction: request_json is passed through to the
     // node's wallet fund endpoint (same JSON schema as the HTTP `/wallet/fund`

@@ -116,6 +116,8 @@ typedef struct {
     HeaderId tip;
     ClaimableVoucher* vouchers;
     size_t len;
+    uint64_t reward_amount;
+    uint64_t total_claimable;
 } ClaimableVouchers;
 
 // A single spendable wallet note (UTXO): its note ID and value.

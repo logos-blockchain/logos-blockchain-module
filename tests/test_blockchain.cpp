@@ -1383,6 +1383,24 @@ LOGOS_TEST(wallet_get_claimable_vouchers_returns_json) {
     delete module;
 }
 
+LOGOS_TEST(wallet_get_claimable_vouchers_reports_rewards) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("get_claimable_vouchers_error").returns(0);
+    t.mockCFunction("get_claimable_vouchers_count").returns(3);
+    t.mockCFunction("claimable_vouchers_reward_amount").returns(250);
+
+    StdLogosResult result = module->wallet_get_claimable_vouchers();
+    LOGOS_ASSERT_TRUE(result.success);
+    std::string json = result.value.get<std::string>();
+    LOGOS_ASSERT_TRUE(contains(json, "\"reward_amount\":\"250\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"total_claimable\":\"750\""));
+    delete module;
+}
+
 LOGOS_TEST(wallet_get_claimable_vouchers_returns_error_on_ffi_failure) {
     auto t = LogosTestContext("blockchain_module");
     TempDir tmpDir;
