@@ -166,6 +166,11 @@ public:
     ) const;
     [[nodiscard]] StdLogosResult blend_info() const;
 
+    // Chain
+    // Chain ID of the deployment the running node was started with. Fixed for
+    // the node's lifetime.
+    [[nodiscard]] StdLogosResult get_chain_id() const;
+
     // Explorer
     [[nodiscard]] StdLogosResult get_block(const std::string& header_id_hex) const;
     [[nodiscard]] StdLogosResult get_blocks(uint64_t from_slot, uint64_t to_slot) const;

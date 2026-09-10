@@ -1129,6 +1129,26 @@ StdLogosResult LogosBlockchainModule::blend_info() const {
     return result::ok(std::move(out));
 }
 
+// Chain
+
+StdLogosResult LogosBlockchainModule::get_chain_id() const {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+
+    auto [value, error] = ::get_chain_id(node);
+    if (!is_ok(&error)) {
+        return result::err(operation_status::take_message(error));
+    }
+
+    std::string out(value);
+    OperationStatus free_status = free_cstring(value);
+    if (!is_ok(&free_status)) {
+        fprintf(stderr, "Failed to free chain ID string: %s\n", operation_status::take_message(free_status).c_str());
+    }
+    return result::ok(std::move(out));
+}
+
 // Explorer
 
 StdLogosResult LogosBlockchainModule::get_block(const std::string& header_id_hex) const {

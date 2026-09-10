@@ -171,6 +171,7 @@ typedef struct { TimeInfo* value; OperationStatus error; } TimeInfoResult;
 typedef struct { Hash value; OperationStatus error; } SubmitTransactionResult;
 typedef struct { Hash value; OperationStatus error; } FfiPoWClaimResult;
 typedef struct { PoWClaimableRewards value; OperationStatus error; } FfiPoWClaimableRewardsResult;
+typedef struct { char* value; OperationStatus error; } FfiGetChainIdResult;
 
 // Block event callback
 typedef void (*BlockCallback)(const char* block_json);
@@ -252,6 +253,9 @@ BlendHashResult blend_join_as_core_node(
     const char* locator,
     const uint8_t* locked_note_id);
 StringResult blend_info(LogosBlockchainNode* node);
+
+// Chain
+FfiGetChainIdResult get_chain_id(const LogosBlockchainNode* node);
 
 // Explorer
 StringResult get_block(LogosBlockchainNode* node, const HeaderId* header_id);

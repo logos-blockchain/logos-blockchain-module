@@ -341,6 +341,15 @@ StringResult blend_info(LogosBlockchainNode* node) {
     return result;
 }
 
+FfiGetChainIdResult get_chain_id(const LogosBlockchainNode* node) {
+    LOGOS_CMOCK_RECORD("get_chain_id");
+    FfiGetChainIdResult result;
+    const char* chain_id = LOGOS_CMOCK_RETURN_STRING("get_chain_id");
+    result.value = chain_id ? strdup(chain_id) : nullptr;
+    result.error = make_status(LOGOS_CMOCK_RETURN(int, "get_chain_id_error"));
+    return result;
+}
+
 StringResult get_block(LogosBlockchainNode* node, const HeaderId* header_id) {
     LOGOS_CMOCK_RECORD("get_block");
     StringResult result;
