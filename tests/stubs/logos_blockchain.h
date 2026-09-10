@@ -155,6 +155,14 @@ typedef struct {
     uint32_t current_epoch;
 } TimeInfo;
 
+// libp2p connectivity counters (plain values, no free call needed)
+typedef struct {
+    size_t n_peers;
+    uint32_t n_connections;
+    uint32_t n_pending_connections;
+    size_t n_discovered_peers;
+} NetworkInfo;
+
 // Result types (C++ structured bindings decompose these)
 typedef struct { LogosBlockchainNode* value; OperationStatus error; } NodeResult;
 typedef struct { uint64_t value; OperationStatus error; } BalanceResult;
@@ -172,6 +180,7 @@ typedef struct { Hash value; OperationStatus error; } SubmitTransactionResult;
 typedef struct { Hash value; OperationStatus error; } FfiPoWClaimResult;
 typedef struct { PoWClaimableRewards value; OperationStatus error; } FfiPoWClaimableRewardsResult;
 typedef struct { char* value; OperationStatus error; } FfiGetChainIdResult;
+typedef struct { NetworkInfo value; OperationStatus error; } FfiNetworkInfoResult;
 
 // Block event callback
 typedef void (*BlockCallback)(const char* block_json);
@@ -256,6 +265,9 @@ StringResult blend_info(LogosBlockchainNode* node);
 
 // Chain
 FfiGetChainIdResult get_chain_id(const LogosBlockchainNode* node);
+
+// Network
+FfiNetworkInfoResult get_network_info(const LogosBlockchainNode* node);
 
 // Explorer
 StringResult get_block(LogosBlockchainNode* node, const HeaderId* header_id);

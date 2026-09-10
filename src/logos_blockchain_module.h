@@ -171,6 +171,13 @@ public:
     // the node's lifetime.
     [[nodiscard]] StdLogosResult get_chain_id() const;
 
+    // Network
+    // libp2p connectivity counters of the running node, as JSON:
+    //   { n_peers, n_connections, n_pending_connections, n_discovered_peers }
+    // The peer and address lists behind these counts are available over HTTP
+    // at `/network/info`.
+    [[nodiscard]] StdLogosResult get_network_info() const;
+
     // Explorer
     [[nodiscard]] StdLogosResult get_block(const std::string& header_id_hex) const;
     [[nodiscard]] StdLogosResult get_blocks(uint64_t from_slot, uint64_t to_slot) const;

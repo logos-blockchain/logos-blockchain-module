@@ -1149,6 +1149,26 @@ StdLogosResult LogosBlockchainModule::get_chain_id() const {
     return result::ok(std::move(out));
 }
 
+// Network
+
+StdLogosResult LogosBlockchainModule::get_network_info() const {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+
+    auto [value, error] = ::get_network_info(node);
+    if (!is_ok(&error)) {
+        return result::err(operation_status::take_message(error));
+    }
+
+    json obj;
+    obj["n_peers"] = static_cast<int64_t>(value.n_peers);
+    obj["n_connections"] = value.n_connections;
+    obj["n_pending_connections"] = value.n_pending_connections;
+    obj["n_discovered_peers"] = static_cast<int64_t>(value.n_discovered_peers);
+    return result::ok(obj.dump());
+}
+
 // Explorer
 
 StdLogosResult LogosBlockchainModule::get_block(const std::string& header_id_hex) const {

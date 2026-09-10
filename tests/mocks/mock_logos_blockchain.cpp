@@ -350,6 +350,17 @@ FfiGetChainIdResult get_chain_id(const LogosBlockchainNode* node) {
     return result;
 }
 
+FfiNetworkInfoResult get_network_info(const LogosBlockchainNode* node) {
+    LOGOS_CMOCK_RECORD("get_network_info");
+    FfiNetworkInfoResult result;
+    result.value.n_peers = static_cast<size_t>(LOGOS_CMOCK_RETURN(int, "network_n_peers"));
+    result.value.n_connections = static_cast<uint32_t>(LOGOS_CMOCK_RETURN(int, "network_n_connections"));
+    result.value.n_pending_connections = static_cast<uint32_t>(LOGOS_CMOCK_RETURN(int, "network_n_pending_connections"));
+    result.value.n_discovered_peers = static_cast<size_t>(LOGOS_CMOCK_RETURN(int, "network_n_discovered_peers"));
+    result.error = make_status(LOGOS_CMOCK_RETURN(int, "get_network_info_error"));
+    return result;
+}
+
 StringResult get_block(LogosBlockchainNode* node, const HeaderId* header_id) {
     LOGOS_CMOCK_RECORD("get_block");
     StringResult result;
