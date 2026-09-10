@@ -131,6 +131,21 @@ typedef struct {
     size_t len;
 } WalletNotes;
 
+// A wallet note old enough to take part in the leadership lottery.
+typedef struct {
+    NoteId id;
+    uint64_t value;
+    uint8_t public_key[32];
+} LeaderAgedNote;
+
+// The wallet's notes eligible to lead at a given tip.
+typedef struct {
+    HeaderId tip;
+    LeaderAgedNote* notes;
+    size_t len;
+    uint64_t total_value;
+} LeaderAgedNotes;
+
 // Cryptarchia consensus info
 typedef struct {
     uint8_t lib[32];
@@ -171,6 +186,7 @@ typedef struct { TxHash value; OperationStatus error; } FfiLeaderClaimResult;
 typedef struct { Hash value; OperationStatus error; } FfiChannelDepositResult;
 typedef struct { KnownAddresses value; OperationStatus error; } KnownAddressesResult;
 typedef struct { WalletNotes value; OperationStatus error; } FfiWalletNotesResult;
+typedef struct { LeaderAgedNotes value; OperationStatus error; } FfiLeaderAgedNotesResult;
 typedef struct { ClaimableVouchers value; OperationStatus error; } FfiClaimableVouchersResult;
 typedef struct { Hash value; OperationStatus error; } BlendHashResult;
 typedef struct { char* value; OperationStatus error; } StringResult;
@@ -242,6 +258,10 @@ FfiWalletNotesResult get_wallet_notes(
     const uint8_t* wallet_address,
     const HeaderId* optional_tip);
 OperationStatus free_wallet_notes(WalletNotes notes);
+FfiLeaderAgedNotesResult get_leader_aged_notes(
+    const LogosBlockchainNode* node,
+    const HeaderId* optional_tip);
+OperationStatus free_leader_aged_notes(LeaderAgedNotes notes);
 StringResult wallet_fund_tx(LogosBlockchainNode* node, const char* request_json);
 
 // Transactions

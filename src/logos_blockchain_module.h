@@ -113,6 +113,14 @@ public:
         const std::string& wallet_address_hex,
         const std::string& optional_tip_hex
     ) const;
+    // Wallet notes old enough to take part in the leadership lottery, i.e.
+    // whether this node can currently win a slot, as a JSON string:
+    //   { "tip": "<hex>", "total_value": "<u64>",
+    //     "notes": [ { "id": "<hex>", "value": "<u64>", "public_key": "<hex>" }, ... ] }
+    // An empty notes array means the node cannot lead at that tip. The faucet
+    // note is not filtered out. optional_tip_hex may be empty to query at the
+    // current tip.
+    [[nodiscard]] StdLogosResult wallet_get_leader_aged_notes(const std::string& optional_tip_hex) const;
     [[nodiscard]] StdLogosResult leader_claim() const;
     [[nodiscard]] StdLogosResult wallet_get_claimable_vouchers() const;
     // Funds an unsigned transaction: request_json is passed through to the

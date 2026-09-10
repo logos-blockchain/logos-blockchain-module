@@ -284,6 +284,40 @@ OperationStatus free_wallet_notes(WalletNotes notes) {
     return make_status(0);
 }
 
+// Leader-aged-notes mock storage (up to 4 notes)
+static LeaderAgedNote s_mockLeaderAgedNotes[4];
+
+FfiLeaderAgedNotesResult get_leader_aged_notes(
+    const LogosBlockchainNode* node,
+    const HeaderId* optional_tip)
+{
+    LOGOS_CMOCK_RECORD("get_leader_aged_notes");
+    FfiLeaderAgedNotesResult result;
+    memset(&result.value, 0, sizeof(LeaderAgedNotes));
+    int err = LOGOS_CMOCK_RETURN(int, "get_leader_aged_notes_error");
+    result.error = make_status(err);
+    if (err == 0) {
+        int count = LOGOS_CMOCK_RETURN(int, "get_leader_aged_notes_count");
+        if (count > 4) count = 4;
+        if (count < 0) count = 0;
+        for (int i = 0; i < count; ++i) {
+            memset(s_mockLeaderAgedNotes[i].id, 0x10 + i, sizeof(NoteId));
+            s_mockLeaderAgedNotes[i].value = static_cast<uint64_t>(100 * (i + 1));
+            memset(s_mockLeaderAgedNotes[i].public_key, 0xAA + 0x11 * i, 32);
+            result.value.total_value += s_mockLeaderAgedNotes[i].value;
+        }
+        memset(result.value.tip, 0xFF, sizeof(HeaderId));
+        result.value.notes = count > 0 ? s_mockLeaderAgedNotes : nullptr;
+        result.value.len = static_cast<size_t>(count);
+    }
+    return result;
+}
+
+OperationStatus free_leader_aged_notes(LeaderAgedNotes notes) {
+    LOGOS_CMOCK_RECORD("free_leader_aged_notes");
+    return make_status(0);
+}
+
 StringResult wallet_fund_tx(LogosBlockchainNode* node, const char* request_json) {
     LOGOS_CMOCK_RECORD("wallet_fund_tx");
     StringResult result;

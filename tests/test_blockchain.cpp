@@ -433,6 +433,14 @@ LOGOS_TEST(wallet_get_notes_without_node_returns_error) {
     LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
 }
 
+LOGOS_TEST(wallet_get_leader_aged_notes_without_node_returns_error) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+    StdLogosResult result = module.wallet_get_leader_aged_notes("");
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
+}
+
 LOGOS_TEST(wallet_get_known_addresses_without_node_returns_error) {
     auto t = LogosTestContext("blockchain_module");
     LogosBlockchainModule module;
@@ -1138,6 +1146,73 @@ LOGOS_TEST(wallet_get_notes_rejects_invalid_address) {
     StdLogosResult result = module->wallet_get_notes("bad", "");
     LOGOS_ASSERT_FALSE(result.success);
     LOGOS_ASSERT_TRUE(contains(result.error, "wallet address"));
+    delete module;
+}
+
+LOGOS_TEST(wallet_get_leader_aged_notes_returns_json_on_success) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("get_leader_aged_notes_error").returns(0);
+    t.mockCFunction("get_leader_aged_notes_count").returns(2);
+
+    StdLogosResult result = module->wallet_get_leader_aged_notes("");
+    LOGOS_ASSERT_TRUE(result.success);
+    std::string json = result.value.get<std::string>();
+    LOGOS_ASSERT_TRUE(contains(json, "\"tip\":\"" + std::string(64, 'f') + "\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"value\":\"100\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"value\":\"200\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"public_key\":\"" + std::string(64, 'a') + "\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"public_key\":\"" + std::string(64, 'b') + "\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"total_value\":\"300\""));
+    LOGOS_ASSERT(t.cFunctionCalled("get_leader_aged_notes"));
+    LOGOS_ASSERT(t.cFunctionCalled("free_leader_aged_notes"));
+    delete module;
+}
+
+LOGOS_TEST(wallet_get_leader_aged_notes_returns_empty_notes_array) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("get_leader_aged_notes_error").returns(0);
+    t.mockCFunction("get_leader_aged_notes_count").returns(0);
+
+    StdLogosResult result = module->wallet_get_leader_aged_notes("");
+    LOGOS_ASSERT_TRUE(result.success);
+    std::string json = result.value.get<std::string>();
+    LOGOS_ASSERT_TRUE(contains(json, "\"notes\":[]"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"total_value\":\"0\""));
+    delete module;
+}
+
+LOGOS_TEST(wallet_get_leader_aged_notes_returns_error_on_ffi_failure) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("get_leader_aged_notes_error").returns(1);
+
+    StdLogosResult result = module->wallet_get_leader_aged_notes("");
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "mock error"));
+    delete module;
+}
+
+LOGOS_TEST(wallet_get_leader_aged_notes_rejects_invalid_optional_tip) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    StdLogosResult result = module->wallet_get_leader_aged_notes("bad");
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "optional tip"));
+    LOGOS_ASSERT_FALSE(t.cFunctionCalled("get_leader_aged_notes"));
     delete module;
 }
 
