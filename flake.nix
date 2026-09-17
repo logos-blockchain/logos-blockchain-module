@@ -62,8 +62,23 @@
           if builtins.length parts < 2 then "0.1.0"
           else builtins.head (builtins.elemAt parts 1);
 
-      mkExampleRustLib = { pkgs }:
-        pkgs.rustPlatform.buildRustPackage {
+      # The client's node crates need rapidsnark, the circuits and the node's
+      # toolchain, all taken from the logos-blockchain input.
+      mkExampleRustLib = { pkgs, system }:
+        let
+          nodeFlake = inputs.logos-blockchain;
+          rapidsnark = nodeFlake.inputs.rust-rapidsnark.packages.${system}.rapidsnark;
+          circuits = nodeFlake.inputs.logos-blockchain-circuits.packages.${system}.default;
+          rustChannel =
+            (builtins.fromTOML (builtins.readFile "${nodeFlake}/rust-toolchain.toml")).toolchain.channel;
+          rpkgs = import nixpkgs {
+            inherit system;
+            overlays = [ nodeFlake.inputs.rust-overlay.overlays.default ];
+          };
+          toolchain = rpkgs.rust-bin.stable.${rustChannel}.default;
+          rustPlatform = rpkgs.makeRustPlatform { cargo = toolchain; rustc = toolchain; };
+        in
+        rustPlatform.buildRustPackage {
           pname = "blockchain_client_example";
           version = "0.0.999";
           src = pkgs.runCommand "blockchain-client-example-src" {} ''
@@ -75,17 +90,24 @@
             lockFile = ./rust-client/example-module/rust-lib/Cargo.lock;
             allowBuiltinFetchGit = true;
           };
+          nativeBuildInputs = [ pkgs.pkg-config pkgs.cmake pkgs.clang pkgs.llvmPackages.libclang.lib ];
+          buildInputs = [ pkgs.openssl ];
+          env = {
+            RAPIDSNARK_LIB_DIR = "${rapidsnark}";
+            LBC_ROOT_DIR = "${circuits}";
+            LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+          };
           doCheck = false;
         };
 
-      mkExampleModule = { pkgs }:
+      mkExampleModule = { pkgs, system }:
         logos-module-builder.lib.mkLogosModule {
           src = ./rust-client/example-module;
           configFile = ./rust-client/example-module/metadata.json;
           flakeInputs = { blockchain_module = self; } // inputs;
           preConfigure = ''
             mkdir -p lib
-            cp ${mkExampleRustLib { inherit pkgs; }}/lib/libblockchain_client_example.a lib/
+            cp ${mkExampleRustLib { inherit pkgs system; }}/lib/libblockchain_client_example.a lib/
           '';
         };
     in
@@ -93,7 +115,7 @@
       packages = forAllSystems (system:
         let
           pkgs = import nixpkgs { inherit system; };
-          example = (mkExampleModule { inherit pkgs; }).packages.${system};
+          example = (mkExampleModule { inherit pkgs system; }).packages.${system};
         in
         module.packages.${system} // {
           rust-client-example = example.default;
