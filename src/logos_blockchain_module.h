@@ -227,6 +227,67 @@ public:
     //   { claimable_tickets, slots_until_expiry: [ ... ] }
     [[nodiscard]] StdLogosResult pow_claimable_rewards() const;
 
+    // PoW config
+    // read when the node's PoW service starts, and
+    // the user config is the only place they can come from — GenerateConfigArgs
+    // carries no PoW fields. So they are written into an already-generated config
+    // in place, and only take effect on the next start(). 
+    //
+    // config_json is an object, every field optional; an absent field leaves that
+    // part of the config alone:
+    //   { "max_threads": <u64> | null, "max_tickets_per_block": <u64>,
+    //     "tick_seconds": <u64>,
+    //     "auto_claim_targets": [ { "public_key": "<hex>", "threshold": <u64> } ] }
+    //
+    // Unknown fields are rejected rather than ignored, here and inside a target:
+    // a misspelled setting reported as a successful write is worse than an error.
+    //
+    // max_threads is the one field that takes an explicit null, because the node
+    // types it as an Option: null puts the search pool back to one thread per
+    // logical CPU, which is otherwise unreachable once a count has been pinned.
+    // The other two are not Options, so a null there is an error rather than a
+    // silent no-op — omit the field to leave it alone.
+    //
+    // public_key is required in a target, though it may be the empty string,
+    // which names the leader's funding key. A missing field is an error: it
+    // would otherwise silently redirect the node's mining income.
+    //
+    // An empty auto_claim_targets array clears the list, which is how auto-claim
+    // is turned off: the node arms it at startup exactly when the network pays
+    // rewards and the list is non-empty, so presence of a target — not a separate
+    // flag — is the enable. Omitting the field entirely leaves existing targets
+    // untouched
+    //
+    // Only a config as generate_user_config writes it is supported: block
+    // mappings, two-space indent, no anchors and no `!include` tags. The node's
+    // own loader resolves includes; the reader here walks indentation and cannot,
+    // so a section assembled that way is reported rather than read as empty.
+    [[nodiscard]] static StdLogosResult pow_configure(
+        const std::string& config_path,
+        const std::string& config_json
+    );
+
+    // Config introspection
+    // The wallet keys recorded in an already-generated config. wallet_get_* all
+    // need a running node, so this is the only way to offer a choice of accounts
+    // while the config is still being written — which is exactly when auto-claim
+    // targets have to be picked. JSON:
+    //   { "known_keys": [ "<hex>", ... ], "leader_funding_pk": "<hex>",
+    //     "voucher_master_key_id": "<hex>", "sdp_funding_pk": "<hex>",
+    //     "blend_signing_key_id": "<hex>" }
+    // The four role fields can name the same key — a generated config funds the
+    // leader and SDP wallets from one — so they are reported separately and a
+    // caller labelling keys has to compose them rather than pick the first match.
+    // Only known_keys is a claim-target candidate; blend_signing_key_id in
+    // particular is usually absent from it.
+    // known_keys holds the public keys (the values of the mapping, not its ids),
+    // since those are what a claim target is matched against. A field the config
+    // does not carry comes back as an empty string rather than an error.
+    [[nodiscard]] static StdLogosResult config_get_wallet_keys(const std::string& config_path);
+    // Reads the keystore's PUBLIC half only. See the definition for why this
+    // is separate from config_get_wallet_keys and why it fails closed.
+    [[nodiscard]] static StdLogosResult get_key_titles(const std::string& config_path);
+
     // clang-format off
 // Clang-format only handles public/private/protected, so it miss-indents this section.
 // Guard kept until https://github.com/llvm/llvm-project/issues/64763 lands.
