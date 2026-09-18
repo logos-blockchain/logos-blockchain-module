@@ -71,7 +71,10 @@ NodeResult start_lb_node(const char* config_path, const char* deployment) {
 
 OperationStatus shutdown_node(LogosBlockchainNode* node) {
     LOGOS_CMOCK_RECORD("shutdown_node");
-    return make_status(0);
+    // Defaults to 0 (success) when a test sets no expectation. The real
+    // function frees the node whether or not it reports success, so the failure
+    // path is worth driving: the module has to drop its pointer either way.
+    return make_status(LOGOS_CMOCK_RETURN(int, "shutdown_node"));
 }
 
 OperationStatus update_user_config(const char* user_config_path, const char* keystore_path) {

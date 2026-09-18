@@ -4,11 +4,17 @@
 #include <boost/algorithm/hex.hpp>
 #include <boost/algorithm/string/trim.hpp>
 #include <cctype>
+#include <cerrno>
 #include <charconv>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <nlohmann/json.hpp>
 #include <string>
+#include <unistd.h>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -270,6 +276,441 @@ namespace {
             }
         }
     };
+
+    // Block-YAML reading and editing.
+    //
+    // The node writes its user config with serde_yaml: block mappings, two-space
+    // indentation, no anchors, and no flow collections on the paths touched here.
+    // Walking that subset by indentation is enough to read a scalar and replace a
+    // single value, and it spares the module a YAML library it would then have to
+    // ship inside every portable bundle — and a whole-document round-trip through
+    // a second implementation, which would put the config's KMS key tags at risk
+    // for the sake of two lines.
+    namespace yaml {
+        constexpr size_t NPOS = static_cast<size_t>(-1);
+
+        // Indentation of a line, or -1 when it holds nothing addressable.
+        int indent_of(const std::string& line) {
+            size_t i = 0;
+            while (i < line.size() && line[i] == ' ')
+                ++i;
+            if (i == line.size() || line[i] == '#' || line[i] == '\r')
+                return -1;
+            return static_cast<int>(i);
+        }
+
+        bool is_sequence_item(const std::string& line) {
+            const int indent = indent_of(line);
+            if (indent < 0)
+                return false;
+            const size_t at = static_cast<size_t>(indent);
+            return line[at] == '-' && (at + 1 == line.size() || line[at + 1] == ' ');
+        }
+
+        bool declares_key(const std::string& line, int indent, const std::string& key) {
+            if (indent_of(line) != indent)
+                return false;
+            const size_t at = static_cast<size_t>(indent);
+            return line.size() > at + key.size() && line.compare(at, key.size(), key) == 0 &&
+                   line[at + key.size()] == ':';
+        }
+
+        // Line declaring `key` at `indent`, searched from `begin` and stopped
+        // where the enclosing block ends — the first line shallower than `indent`.
+        size_t find_key(const std::vector<std::string>& lines, size_t begin, int indent, const std::string& key) {
+            for (size_t i = begin; i < lines.size(); ++i) {
+                const int line_indent = indent_of(lines[i]);
+                if (line_indent < 0)
+                    continue;
+                if (line_indent < indent)
+                    return NPOS;
+                if (declares_key(lines[i], indent, key))
+                    return i;
+            }
+            return NPOS;
+        }
+
+        // One past the last line of the value opened at `key_line`: everything
+        // deeper, plus sequence items, which serde_yaml writes at the key's own
+        // indentation rather than below it.
+        size_t value_end(const std::vector<std::string>& lines, size_t key_line, int indent) {
+            size_t end = key_line + 1;
+            for (size_t i = key_line + 1; i < lines.size(); ++i) {
+                const int line_indent = indent_of(lines[i]);
+                if (line_indent < 0)
+                    continue;
+                if (line_indent < indent || (line_indent == indent && !is_sequence_item(lines[i])))
+                    break;
+                end = i + 1;
+            }
+            return end;
+        }
+
+        // Indentation this key's children are written at, or -1 when it opens no
+        // block. Read from the file rather than assumed, so a config indented
+        // some other way still resolves.
+        int child_indent(const std::vector<std::string>& lines, size_t key_line, int indent) {
+            for (size_t i = key_line + 1; i < lines.size(); ++i) {
+                const int line_indent = indent_of(lines[i]);
+                if (line_indent < 0)
+                    continue;
+                return line_indent > indent ? line_indent : -1;
+            }
+            return -1;
+        }
+
+        // Scalar after "key:", trimmed. Empty when the key opens a block.
+        std::string scalar_of(const std::string& line) {
+            const size_t colon = line.find(':');
+            if (colon == std::string::npos)
+                return {};
+            std::string value = line.substr(colon + 1);
+            boost::algorithm::trim(value);
+            return value;
+        }
+
+        std::vector<std::string> split_lines(const std::string& text) {
+            std::vector<std::string> lines;
+            size_t start = 0;
+            while (true) {
+                const size_t newline = text.find('\n', start);
+                if (newline == std::string::npos) {
+                    lines.push_back(text.substr(start));
+                    return lines;
+                }
+                lines.push_back(text.substr(start, newline - start));
+                start = newline + 1;
+            }
+        }
+
+        std::string join_lines(const std::vector<std::string>& lines) {
+            std::string text;
+            for (size_t i = 0; i < lines.size(); ++i) {
+                if (i > 0)
+                    text += '\n';
+                text += lines[i];
+            }
+            return text;
+        }
+
+        // Line declaring the last segment of `path`, or NPOS when any segment is
+        // missing.
+        size_t find_path(const std::vector<std::string>& lines, const std::vector<std::string>& path) {
+            size_t begin = 0;
+            int indent = 0;
+            for (size_t depth = 0; depth < path.size(); ++depth) {
+                const size_t found = find_key(lines, begin, indent, path[depth]);
+                if (found == NPOS)
+                    return NPOS;
+                if (depth + 1 == path.size())
+                    return found;
+                const int child = child_indent(lines, found, indent);
+                if (child < 0)
+                    return NPOS;
+                begin = found + 1;
+                indent = child;
+            }
+            return NPOS;
+        }
+
+        // The first segment of `path` carrying a scalar where this reader
+        // expects a block mapping, or empty when the whole path is walkable.
+        //
+        // The node's own YAML loader resolves `!include other.yaml` tags, and a
+        // config assembled that way is outside what indentation-walking can
+        // follow. Reporting the segment lets a caller say so, rather than read
+        // an included section as an empty block — which for wallet.known_keys
+        // would look like a wallet holding no keys at all and turn every claim
+        // target into a spurious "not tracked" rejection.
+        std::string scalar_segment(
+            const std::vector<std::string>& lines,
+            const std::vector<std::string>& path
+        ) {
+            size_t begin = 0;
+            int indent = 0;
+            std::string walked;
+            for (size_t depth = 0; depth < path.size(); ++depth) {
+                const size_t found = find_key(lines, begin, indent, path[depth]);
+                if (found == NPOS)
+                    return {};
+                if (!walked.empty())
+                    walked += '.';
+                walked += path[depth];
+                if (!scalar_of(lines[found]).empty())
+                    return walked;
+                if (depth + 1 == path.size())
+                    return {};
+                const int child = child_indent(lines, found, indent);
+                if (child < 0)
+                    return {};
+                begin = found + 1;
+                indent = child;
+            }
+            return {};
+        }
+
+        // Whether the mapping at `path` holds an entry whose value is `value`.
+        // Used to check a claim target against wallet.known_keys, which maps key
+        // id to public key — the public keys are the values.
+        bool maps_to_value(
+            const std::vector<std::string>& lines,
+            const std::vector<std::string>& path,
+            const std::string& value
+        ) {
+            const size_t key_line = find_path(lines, path);
+            if (key_line == NPOS)
+                return false;
+            const int indent = indent_of(lines[key_line]);
+            const int child = child_indent(lines, key_line, indent);
+            if (child < 0)
+                return false;
+            const size_t end = value_end(lines, key_line, indent);
+            for (size_t i = key_line + 1; i < end; ++i) {
+                if (indent_of(lines[i]) != child)
+                    continue;
+                std::string entry = scalar_of(lines[i]);
+                std::transform(entry.begin(), entry.end(), entry.begin(), [](const unsigned char c) {
+                    return std::tolower(c);
+                });
+                if (entry == value)
+                    return true;
+            }
+            return false;
+        }
+
+        // Values of the mapping at `path`, in file order. The companion to
+        // maps_to_value for callers that want the whole set rather than a
+        // membership test: wallet.known_keys maps key id to public key, and it
+        // is the public keys a claim target is matched against.
+        std::vector<std::string> values_under(
+            const std::vector<std::string>& lines,
+            const std::vector<std::string>& path
+        ) {
+            std::vector<std::string> values;
+            const size_t key_line = find_path(lines, path);
+            if (key_line == NPOS)
+                return values;
+            const int indent = indent_of(lines[key_line]);
+            const int child = child_indent(lines, key_line, indent);
+            if (child < 0)
+                return values;
+            const size_t end = value_end(lines, key_line, indent);
+            for (size_t i = key_line + 1; i < end; ++i) {
+                if (indent_of(lines[i]) != child)
+                    continue;
+                std::string entry = scalar_of(lines[i]);
+                if (entry.empty())
+                    continue;
+                std::transform(entry.begin(), entry.end(), entry.begin(), [](const unsigned char c) {
+                    return std::tolower(c);
+                });
+                values.push_back(std::move(entry));
+            }
+            return values;
+        }
+
+        // Key/value pairs of the mapping at `path`, in file order. The companion
+        // to values_under for callers that need the KEY as well: keystore.yaml
+        // writes `public_keys` as `Title: <public key>`, and the title is the
+        // point. Values are lowercased to match the rest of this reader; titles
+        // are left as written.
+        std::vector<std::pair<std::string, std::string>> pairs_under(
+            const std::vector<std::string>& lines,
+            const std::vector<std::string>& path
+        ) {
+            std::vector<std::pair<std::string, std::string>> pairs;
+            const size_t key_line = find_path(lines, path);
+            if (key_line == NPOS)
+                return pairs;
+            const int indent = indent_of(lines[key_line]);
+            const int child = child_indent(lines, key_line, indent);
+            if (child < 0)
+                return pairs;
+            const size_t end = value_end(lines, key_line, indent);
+            for (size_t i = key_line + 1; i < end; ++i) {
+                if (indent_of(lines[i]) != child)
+                    continue;
+                const size_t colon = lines[i].find(':');
+                if (colon == std::string::npos)
+                    continue;
+                std::string key = lines[i].substr(0, colon);
+                boost::algorithm::trim(key);
+                std::string value = scalar_of(lines[i]);
+                if (key.empty() || value.empty())
+                    continue;
+                std::transform(value.begin(), value.end(), value.begin(), [](const unsigned char c) {
+                    return std::tolower(c);
+                });
+                pairs.emplace_back(std::move(key), std::move(value));
+            }
+            return pairs;
+        }
+
+        // Replaces the value written under `path` with `render(indent)`, where
+        // `indent` is the column the last segment sits at. Missing blocks along
+        // the way are created: a missing top-level section is appended as a new
+        // block (leaving every existing line untouched), a missing nested one is
+        // added as its parent's first child.
+        template <typename Render>
+        bool set_value_at(
+            std::vector<std::string>& lines,
+            const std::vector<std::string>& path,
+            const Render& render,
+            std::string& error
+        ) {
+            size_t begin = 0;
+            int indent = 0;
+            for (size_t depth = 0; depth < path.size(); ++depth) {
+                const size_t found = find_key(lines, begin, indent, path[depth]);
+
+                if (found == NPOS) {
+                    // Build the rest of the path as a nested block.
+                    std::vector<std::string> block;
+                    int at = indent;
+                    for (size_t rest = depth; rest + 1 < path.size(); ++rest) {
+                        block.push_back(std::string(static_cast<size_t>(at), ' ') + path[rest] + ":");
+                        at += 2;
+                    }
+                    const std::vector<std::string> tail = render(at);
+                    block.insert(block.end(), tail.begin(), tail.end());
+
+                    // A trailing newline leaves an empty last element; keep the
+                    // file ending in one by inserting before it.
+                    size_t at_line = begin;
+                    if (depth == 0) {
+                        at_line = lines.size();
+                        if (at_line > 0 && lines.back().empty())
+                            --at_line;
+                    }
+                    lines.insert(
+                        lines.begin() + static_cast<std::ptrdiff_t>(at_line), block.begin(), block.end()
+                    );
+                    return true;
+                }
+
+                if (depth + 1 == path.size()) {
+                    const size_t end = value_end(lines, found, indent);
+                    const std::vector<std::string> value = render(indent);
+                    lines.erase(
+                        lines.begin() + static_cast<std::ptrdiff_t>(found),
+                        lines.begin() + static_cast<std::ptrdiff_t>(end)
+                    );
+                    lines.insert(
+                        lines.begin() + static_cast<std::ptrdiff_t>(found), value.begin(), value.end()
+                    );
+                    return true;
+                }
+
+                // Descending into something that is not a block mapping — a flow
+                // map, say — would splice children under a scalar and produce a
+                // config the node cannot parse. Refuse instead.
+                if (!scalar_of(lines[found]).empty()) {
+                    error = path[depth] + " is not a block mapping; refusing to edit the config.";
+                    return false;
+                }
+                const int child = child_indent(lines, found, indent);
+                begin = found + 1;
+                indent = child > indent ? child : indent + 2;
+            }
+            error = "No path to set.";
+            return false;
+        }
+
+        bool read_file(const fs::path& path, std::string& text, std::string& error) {
+            std::ifstream file(path, std::ios::binary);
+            if (!file) {
+                error = "Failed to open " + path.string() + ".";
+                return false;
+            }
+            text.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+            if (file.bad()) {
+                error = "Failed to read " + path.string() + ".";
+                return false;
+            }
+            return true;
+        }
+
+        // Write via a sibling temp file and rename, so an interrupted write can
+        // never leave a half-written config behind.
+        //
+        // The file holds the node's private keys, so the temp file is created
+        // by mkstemp rather than by an ofstream: it is opened O_EXCL at 0600,
+        // which keeps the key material owner-only for the whole of its life
+        // instead of landing at whatever the process umask allows and being
+        // narrowed afterwards. The unique name mkstemp picks also means two
+        // concurrent writers get two inodes rather than trampling one.
+        bool write_file_atomic(const fs::path& path, const std::string& text, std::string& error) {
+            const std::string temp_pattern = path.string() + ".XXXXXX";
+            std::vector<char> temp_name(temp_pattern.begin(), temp_pattern.end());
+            temp_name.push_back('\0');
+
+            const int fd = ::mkstemp(temp_name.data());
+            if (fd < 0) {
+                error = "Failed to create a temporary file beside " + path.string() + ": " +
+                        std::strerror(errno);
+                return false;
+            }
+            const fs::path temp = temp_name.data();
+
+            const auto fail = [&error, &temp](const std::string& what, const int fd_to_close) {
+                error = what;
+                if (fd_to_close >= 0)
+                    ::close(fd_to_close);
+                std::error_code remove_ec;
+                fs::remove(temp, remove_ec);
+                return false;
+            };
+
+            const char* cursor = text.data();
+            size_t remaining = text.size();
+            while (remaining > 0) {
+                const ssize_t written = ::write(fd, cursor, remaining);
+                if (written < 0) {
+                    if (errno == EINTR)
+                        continue;
+                    return fail(
+                        "Failed to write " + temp.string() + ": " + std::strerror(errno), fd
+                    );
+                }
+                cursor += written;
+                remaining -= static_cast<size_t>(written);
+            }
+
+            // Flush before the rename, so a crash leaves either the old config
+            // or the new one rather than an empty file under the real name.
+            if (::fsync(fd) != 0) {
+                return fail("Failed to flush " + temp.string() + ": " + std::strerror(errno), fd);
+            }
+            if (::close(fd) != 0) {
+                return fail("Failed to close " + temp.string() + ": " + std::strerror(errno), -1);
+            }
+
+            // Carry the original's permissions over. A failure here is fatal
+            // rather than ignored: silently swapping a config's mode is the
+            // same class of mistake as writing the keys world-readable, and
+            // leaving the original untouched is the recoverable outcome.
+            std::error_code error_code;
+            const fs::perms original = fs::status(path, error_code).permissions();
+            if (!error_code && original != fs::perms::unknown) {
+                fs::permissions(temp, original, error_code);
+                if (error_code) {
+                    return fail(
+                        "Failed to carry the permissions of " + path.string() + " over to the new "
+                        "config: " + error_code.message(),
+                        -1
+                    );
+                }
+            }
+
+            fs::rename(temp, path, error_code);
+            if (error_code) {
+                return fail(
+                    "Failed to replace " + path.string() + ": " + error_code.message(), -1
+                );
+            }
+            return true;
+        }
+    } // namespace yaml
 } // namespace
 
 void LogosBlockchainModule::on_new_block_callback(const char* block) {
@@ -471,14 +912,17 @@ StdLogosResult LogosBlockchainModule::stop() {
         return result::err("The node is not running.");
     }
 
+    LogosBlockchainNode* const shutting_down = node;
+    node = nullptr;
     s_instance = nullptr;
 
-    OperationStatus status = shutdown_node(node);
+    OperationStatus status = shutdown_node(shutting_down);
     if (!is_ok(&status)) {
-        fprintf(stderr, "Could not stop the node: %s\n", operation_status::take_message(status).c_str());
+        const std::string message = operation_status::take_message(status);
+        fprintf(stderr, "Could not stop the node: %s\n", message.c_str());
+        return result::err("Could not stop the node: " + message);
     }
 
-    node = nullptr;
     return result::ok();
 }
 
@@ -1215,6 +1659,48 @@ StdLogosResult LogosBlockchainModule::get_network_info() const {
     return result::ok(obj.dump());
 }
 
+// The ONLY call in this module that reads the keystore, and it reads the public
+// half of it: keystore.yaml holds `public_keys` (title -> key id) and
+// `secret_keys` (title -> key) as two separate mappings, and this is scoped to
+// the first. Titles and key ids are not secrets.
+//
+// Kept apart from config_get_wallet_keys deliberately. That one reads the config
+// and is harmless; this one opens a file that is expected to become
+// password-protected, so it gets its own name, its own failure, and its own
+// audit point — and can be swapped for a node-side API without touching the
+// config path.
+//
+// Titles live ONLY in this file. The running node discards them at load (the
+// wallet keeps ZkPublicKey -> KeyId, and a KeyId is not a KeyTitle), so no
+// node-side call can recover them.
+//
+// Fails closed by construction. If the file is absent, unreadable, or encrypted
+// into an envelope with no `public_keys` mapping, the result is an empty set
+// rather than an error: titles are decoration, and every caller must render
+// without them. If instead only `secret_keys` is encrypted — the likely shape,
+// given the two are separate mappings — this keeps working with no password.
+StdLogosResult LogosBlockchainModule::get_key_titles(const std::string& config_path) {
+    const fs::path config = localPathFromFileUrl(config_path);
+    if (config.empty()) {
+        return result::err("Config path was not specified.");
+    }
+
+    // The node's own default: "Defaults to 'keystore.yaml' in the same directory
+    // as --output", and the file update/migrate/participate are handed.
+    const fs::path keystore = config.parent_path() / "keystore.yaml";
+
+    nlohmann::json titles = nlohmann::json::object();
+    std::string text;
+    std::string error;
+    if (!yaml::read_file(keystore, text, error)) {
+        return result::ok(titles.dump());
+    }
+    const std::vector<std::string> lines = yaml::split_lines(text);
+    for (auto& [title, public_key] : yaml::pairs_under(lines, {"public_keys"}))
+        titles[public_key] = title;
+    return result::ok(titles.dump());
+}
+
 // Explorer
 
 StdLogosResult LogosBlockchainModule::get_block(const std::string& header_id_hex) const {
@@ -1453,5 +1939,444 @@ StdLogosResult LogosBlockchainModule::pow_claimable_rewards() const {
             stderr, "Failed to free PoW claimable rewards: %s\n", operation_status::take_message(free_status).c_str()
         );
     }
+    return result::ok(obj.dump());
+}
+
+namespace {
+    // One validated auto-claim destination, in the shape the node's config uses.
+    struct ClaimTargetEntry {
+        std::string public_key;
+        uint64_t threshold;
+    };
+
+    // Canonicalises one target against an already-read config. An empty key
+    // resolves to the leader's funding key — PoS stakes from it, so paying mined
+    // rewards there is what turns mining into stake. The result is checked
+    // against wallet.known_keys the way the node's own validate_claim_targets
+    // does, turning a node that would refuse to boot into an error the caller
+    // can act on while the config is still being written.
+    bool canonical_claim_target(
+        const std::vector<std::string>& lines,
+        const std::string& config_path,
+        const std::string& requested_hex,
+        std::string& out_hex,
+        std::string& error
+    ) {
+        std::string target_hex = requested_hex;
+        boost::algorithm::trim(target_hex);
+        if (target_hex.empty()) {
+            const size_t line = yaml::find_path(lines, {"cryptarchia", "leader", "wallet", "funding_pk"});
+            if (line == yaml::NPOS) {
+                error = "cryptarchia.leader.wallet.funding_pk not found in " + config_path + ".";
+                return false;
+            }
+            target_hex = yaml::scalar_of(lines[line]);
+        }
+
+        // Canonicalise before comparing and writing: the caller may pass a 0x
+        // prefix or upper case, neither of which the node's own config uses.
+        const std::vector<uint8_t> target_bytes = parse_address_hex(target_hex);
+        if (static_cast<int>(target_bytes.size()) != ADDRESS_BYTES) {
+            error = "Invalid claim address (64 hex characters or empty).";
+            return false;
+        }
+        out_hex = bytes_to_hex(target_bytes.data(), target_bytes.size());
+
+        // An included wallet section would read as holding no keys at all, so
+        // every target below would be rejected as untracked. Say what is
+        // actually wrong instead.
+        if (const std::string segment = yaml::scalar_segment(lines, {"wallet", "known_keys"});
+            !segment.empty()) {
+            error = segment + " in " + config_path +
+                    " is not written as a block mapping (an !include tag or a flow mapping); this "
+                    "module can only edit a config as generate_user_config writes it.";
+            return false;
+        }
+
+        // The wallet only indexes the keys it is told to track, so an unlisted
+        // target reports an empty balance forever and the node aborts startup
+        // rather than claim into it.
+        if (!yaml::maps_to_value(lines, {"wallet", "known_keys"}, out_hex)) {
+            error =
+                "Claim address " + out_hex + " is not in wallet.known_keys, so the node would refuse to start.";
+            return false;
+        }
+        return true;
+    }
+
+    // Writes `targets` into pow.auto_claim.targets. An empty list renders the
+    // flow-style `[]` a generated config already carries, which is what leaves
+    // auto-claim off.
+    bool write_claim_targets(
+        std::vector<std::string>& lines,
+        const std::vector<ClaimTargetEntry>& targets,
+        std::string& error
+    ) {
+        const auto render = [&targets](const int indent) {
+            const std::string pad(static_cast<size_t>(indent), ' ');
+            std::vector<std::string> out;
+            if (targets.empty()) {
+                out.push_back(pad + "targets: []");
+                return out;
+            }
+            out.push_back(pad + "targets:");
+            for (const ClaimTargetEntry& target : targets) {
+                out.push_back(pad + "- public_key: " + target.public_key);
+                out.push_back(pad + "  threshold: " + std::to_string(target.threshold));
+            }
+            return out;
+        };
+        return yaml::set_value_at(lines, {"pow", "auto_claim", "targets"}, render, error);
+    }
+
+    // A u64 does not survive a round trip through QML's doubles, so thresholds
+    // arrive as text; accept a JSON number too for callers that can send one.
+    bool parse_threshold(const nlohmann::json& raw, uint64_t& out, std::string& error) {
+        if (raw.is_number_unsigned()) {
+            out = raw.get<uint64_t>();
+            return true;
+        }
+        if (!raw.is_string()) {
+            error = "threshold must be a non-negative integer or a decimal string.";
+            return false;
+        }
+        std::string text = raw.get<std::string>();
+        boost::algorithm::trim(text);
+        const char* const begin = text.data();
+        const char* const end = begin + text.size();
+        const auto [ptr, ec] = std::from_chars(begin, end, out);
+        if (ec != std::errc() || ptr != end) {
+            error = "Invalid threshold '" + text + "'.";
+            return false;
+        }
+        return true;
+    }
+} // namespace
+
+namespace {
+    // How a caller named an optional field. Absent and Null are deliberately
+    // distinct: max_threads is an Option on the node's side, so "let rayon
+    // decide" is a value the API has to be able to express, and an absent field
+    // already means "leave this alone". The fields the node types as non-Option
+    // reject Null instead — writing one would only produce a config that fails
+    // to deserialize at startup.
+    enum class FieldState { Absent, Null, Set };
+
+    bool read_optional_u64(
+        const nlohmann::json& obj,
+        const char* key,
+        uint64_t& out,
+        FieldState& state,
+        std::string& error
+    ) {
+        const auto it = obj.find(key);
+        if (it == obj.end()) {
+            state = FieldState::Absent;
+            return true;
+        }
+        if (it->is_null()) {
+            state = FieldState::Null;
+            return true;
+        }
+        state = FieldState::Set;
+        if (!parse_threshold(*it, out, error)) {
+            error = std::string(key) + ": " + error;
+            return false;
+        }
+        return true;
+    }
+
+    // Rejects field names this API does not know. A typo like "max_thread"
+    // would otherwise be dropped on the floor and reported back as a successful
+    // write, so a frontend a version ahead of (or behind) this module looks
+    // like it changed a setting it never changed. The node reads its own config
+    // the same way — OnUnknownKeys::Fail — so this only matches the strictness
+    // the file is going to meet at startup anyway.
+    bool reject_unknown_fields(
+        const nlohmann::json& obj,
+        const std::vector<std::string>& known,
+        const std::string& what,
+        std::string& error
+    ) {
+        std::string unknown;
+        size_t count = 0;
+        for (const auto& item : obj.items()) {
+            if (std::find(known.begin(), known.end(), item.key()) != known.end())
+                continue;
+            if (count > 0)
+                unknown += ", ";
+            unknown += item.key();
+            ++count;
+        }
+        if (count == 0) {
+            return true;
+        }
+        error = "Unknown " + what + (count > 1 ? " fields: " : " field: ") + unknown + ".";
+        return false;
+    }
+} // namespace
+
+StdLogosResult LogosBlockchainModule::pow_configure(
+    const std::string& config_path,
+    const std::string& config_json
+) {
+    const fs::path config = localPathFromFileUrl(config_path);
+    if (config.empty()) {
+        return result::err("Config path was not specified.");
+    }
+
+    nlohmann::json parsed;
+    try {
+        parsed = nlohmann::json::parse(config_json);
+    } catch (const nlohmann::json::exception& e) {
+        return result::err(std::string("Invalid PoW config JSON: ") + e.what());
+    }
+    if (!parsed.is_object()) {
+        return result::err("config_json must be a JSON object.");
+    }
+
+    std::string error;
+    if (!reject_unknown_fields(
+            parsed,
+            {"max_threads", "max_tickets_per_block", "tick_seconds", "auto_claim_targets"},
+            "PoW config", error
+        )) {
+        return result::err(std::move(error));
+    }
+
+    std::string text;
+    if (!yaml::read_file(config, text, error)) {
+        return result::err(std::move(error));
+    }
+    std::vector<std::string> lines = yaml::split_lines(text);
+
+    // Everything is validated against the file as read before a single line is
+    // edited. A config half-written with one good setting and one bad one is a
+    // node that will not boot, which is strictly worse than changing nothing.
+    // max_threads is the one Option on the node's side: null puts the search
+    // pool back to rayon's own default, which is the only way to undo a
+    // previously pinned thread count.
+    uint64_t max_threads = 0;
+    FieldState max_threads_state = FieldState::Absent;
+    if (!read_optional_u64(parsed, "max_threads", max_threads, max_threads_state, error)) {
+        return result::err(std::move(error));
+    }
+    // The node types this as a NonZeroUsize, so a 0 is a deserialization error
+    // it only reports at startup.
+    if (max_threads_state == FieldState::Set && max_threads == 0) {
+        return result::err("Invalid max_threads (must be at least 1, or null for automatic).");
+    }
+
+    uint64_t max_tickets = 0;
+    FieldState max_tickets_state = FieldState::Absent;
+    if (!read_optional_u64(parsed, "max_tickets_per_block", max_tickets, max_tickets_state, error)) {
+        return result::err(std::move(error));
+    }
+    // Not an Option on the node's side: a null here would be written straight
+    // into a config that then fails to load, so it is refused rather than
+    // quietly treated as "leave it alone".
+    if (max_tickets_state == FieldState::Null) {
+        return result::err("max_tickets_per_block cannot be null; omit it to leave it unchanged.");
+    }
+    if (max_tickets_state == FieldState::Set && max_tickets == 0) {
+        return result::err("Invalid max_tickets_per_block (must be at least 1).");
+    }
+
+    uint64_t tick_seconds = 0;
+    FieldState tick_state = FieldState::Absent;
+    if (!read_optional_u64(parsed, "tick_seconds", tick_seconds, tick_state, error)) {
+        return result::err(std::move(error));
+    }
+    if (tick_state == FieldState::Null) {
+        return result::err("tick_seconds cannot be null; omit it to leave it unchanged.");
+    }
+    if (tick_state == FieldState::Set && tick_seconds == 0) {
+        return result::err("Invalid tick_seconds (must be at least 1).");
+    }
+
+    const bool has_max_threads = max_threads_state != FieldState::Absent;
+    const bool has_max_tickets = max_tickets_state != FieldState::Absent;
+    const bool has_tick = tick_state != FieldState::Absent;
+
+    // Absent leaves the existing target list alone; an empty array clears it,
+    // which is how auto-claim is turned off.
+    std::vector<ClaimTargetEntry> targets;
+    const auto targets_it = parsed.find("auto_claim_targets");
+    const bool has_targets = targets_it != parsed.end() && !targets_it->is_null();
+    if (has_targets) {
+        if (!targets_it->is_array()) {
+            return result::err("auto_claim_targets must be a JSON array.");
+        }
+        targets.reserve(targets_it->size());
+        for (const nlohmann::json& entry : *targets_it) {
+            if (!entry.is_object()) {
+                return result::err("Each target must be an object with public_key and threshold.");
+            }
+            if (!reject_unknown_fields(entry, {"public_key", "threshold"}, "claim target", error)) {
+                return result::err(std::move(error));
+            }
+            // Required, because the empty string is a real value here — it
+            // names the leader's funding key — and a missing field silently
+            // meaning "pay the leader" turns a malformed payload into a change
+            // of where the node's mining income lands.
+            const auto key = entry.find("public_key");
+            if (key == entry.end() || key->is_null()) {
+                return result::err(
+                    "Each target needs a public_key (an empty string means the leader's funding key)."
+                );
+            }
+            if (!key->is_string()) {
+                return result::err("public_key must be a string.");
+            }
+            const std::string requested = key->get<std::string>();
+            uint64_t threshold = 0;
+            const auto raw = entry.find("threshold");
+            if (raw == entry.end() || raw->is_null()) {
+                return result::err("Each target needs a threshold.");
+            }
+            if (!parse_threshold(*raw, threshold, error)) {
+                return result::err(std::move(error));
+            }
+
+            std::string canonical;
+            if (!canonical_claim_target(lines, config.string(), requested, canonical, error)) {
+                return result::err(std::move(error));
+            }
+            // The node pays the neediest target per tick, so a key listed twice
+            // only makes which threshold applies ambiguous.
+            for (const ClaimTargetEntry& seen : targets) {
+                if (seen.public_key == canonical) {
+                    return result::err("Duplicate claim target " + canonical + ".");
+                }
+            }
+            targets.push_back(ClaimTargetEntry{std::move(canonical), threshold});
+        }
+    }
+
+    const auto scalar = [](const char* key, const std::string& value) {
+        return [key, value](const int indent) {
+            return std::vector<std::string>{
+                std::string(static_cast<size_t>(indent), ' ') + key + ": " + value,
+            };
+        };
+    };
+
+    // An explicit null is rendered as `null`, the same way serde_yaml writes a
+    // None, so the node falls back to one search thread per logical CPU.
+    const std::string max_threads_text =
+        max_threads_state == FieldState::Null ? "null" : std::to_string(max_threads);
+    if (has_max_threads
+        && !yaml::set_value_at(
+            lines, {"pow", "mining", "max_threads"}, scalar("max_threads", max_threads_text), error)) {
+        return result::err(std::move(error));
+    }
+    if (has_max_tickets
+        && !yaml::set_value_at(
+            lines, {"pow", "mining", "max_tickets_per_block"},
+            scalar("max_tickets_per_block", std::to_string(max_tickets)), error)) {
+        return result::err(std::move(error));
+    }
+    if (has_tick) {
+        // Renders the key itself, the way every other renderer here does: the
+        // path names what is being replaced, so emitting only the children would
+        // hoist unit/value into auto_claim and the node would reject the file.
+        const auto render_tick = [tick_seconds](const int indent) {
+            const std::string pad(static_cast<size_t>(indent), ' ');
+            return std::vector<std::string>{
+                pad + "tick:",
+                pad + "  unit: seconds",
+                pad + "  value: " + std::to_string(tick_seconds),
+            };
+        };
+        if (!yaml::set_value_at(lines, {"pow", "auto_claim", "tick"}, render_tick, error)) {
+            return result::err(std::move(error));
+        }
+    }
+    if (has_targets && !write_claim_targets(lines, targets, error)) {
+        return result::err(std::move(error));
+    }
+
+    if (!yaml::write_file_atomic(config, yaml::join_lines(lines), error)) {
+        return result::err(std::move(error));
+    }
+
+    nlohmann::json written = nlohmann::json::object();
+    if (max_threads_state == FieldState::Null) {
+        written["max_threads"] = nullptr;
+    } else if (has_max_threads) {
+        written["max_threads"] = max_threads;
+    }
+    if (has_max_tickets) {
+        written["max_tickets_per_block"] = max_tickets;
+    }
+    if (has_tick) {
+        written["tick_seconds"] = tick_seconds;
+    }
+    if (has_targets) {
+        nlohmann::json list = nlohmann::json::array();
+        for (const ClaimTargetEntry& target : targets) {
+            // Both halves: a target says nothing on its own, since the threshold
+            // is what decides whether auto-claim pays it or reports it as
+            // already funded and stops. Thresholds go out as decimal strings for
+            // the same reason they come in as them — a u64 does not survive a
+            // round trip through a JSON reader that parses numbers as doubles.
+            list.push_back(nlohmann::json{
+                {"public_key", target.public_key},
+                {"threshold", std::to_string(target.threshold)},
+            });
+        }
+        written["auto_claim_targets"] = std::move(list);
+    }
+    fprintf(
+        stderr,
+        "pow_configure: %s written; auto-claim is %s\n",
+        written.dump().c_str(),
+        has_targets ? (targets.empty() ? "off" : "on") : "unchanged"
+    );
+    return result::ok(written.dump());
+}
+
+StdLogosResult LogosBlockchainModule::config_get_wallet_keys(const std::string& config_path) {
+    const fs::path config = localPathFromFileUrl(config_path);
+    if (config.empty()) {
+        return result::err("Config path was not specified.");
+    }
+
+    std::string text;
+    std::string error;
+    if (!yaml::read_file(config, text, error)) {
+        return result::err(std::move(error));
+    }
+    const std::vector<std::string> lines = yaml::split_lines(text);
+
+    // An empty known_keys list is a legitimate answer, so it must not double as
+    // the report for a wallet section this reader simply could not follow.
+    if (const std::string segment = yaml::scalar_segment(lines, {"wallet", "known_keys"});
+        !segment.empty()) {
+        return result::err(
+            segment + " in " + config.string() +
+            " is not written as a block mapping (an !include tag or a flow mapping); this module can "
+            "only read a config as generate_user_config writes it."
+        );
+    }
+
+    const auto scalar_at = [&lines](const std::vector<std::string>& path) {
+        const size_t line = yaml::find_path(lines, path);
+        return line == yaml::NPOS ? std::string() : yaml::scalar_of(lines[line]);
+    };
+
+    nlohmann::json obj;
+    obj["known_keys"] = yaml::values_under(lines, {"wallet", "known_keys"});
+    obj["leader_funding_pk"] = scalar_at({"cryptarchia", "leader", "wallet", "funding_pk"});
+    obj["voucher_master_key_id"] = scalar_at({"wallet", "voucher_master_key_id"});
+    // The other two jobs a key in this config can hold. A key may hold several
+    // at once — a generated config points the leader and SDP wallets at the same
+    // funding key — so these are reported separately rather than as one role per
+    // key, and the caller composes them.
+    obj["sdp_funding_pk"] = scalar_at({"sdp", "wallet", "funding_pk"});
+    obj["blend_signing_key_id"] = scalar_at({"blend", "non_ephemeral_signing_key_id"});
+    // Deliberately no key types: kms.backend.keys maps each id to "!<Type>
+    // <secret>", so reporting the tag means reading lines that carry private key
+    // material, and every claim-target candidate is a wallet key anyway.
     return result::ok(obj.dump());
 }
