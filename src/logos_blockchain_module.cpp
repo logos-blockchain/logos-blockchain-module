@@ -560,6 +560,34 @@ StdLogosResult LogosBlockchainModule::migrate_user_config_0_1_2(
     return result::from_operation_status(status);
 }
 
+StdLogosResult LogosBlockchainModule::merge_user_config(
+    const std::string& source_path,
+    const std::string& destination_path,
+    const std::string& extra_yaml,
+    const bool source_insert_missing,
+    const bool extra_insert_missing
+) {
+    const std::string source = localPathFromFileUrl(source_path);
+    const std::string destination = localPathFromFileUrl(destination_path);
+    const char* extra_yaml_ptr = extra_yaml.empty() ? nullptr : extra_yaml.c_str();
+    const MergeConfigFlags flags{source_insert_missing, extra_insert_missing};
+
+    auto [value, error] = ::merge_user_config(source.c_str(), destination.c_str(), extra_yaml_ptr, flags);
+    if (!is_ok(&error)) {
+        return result::err(operation_status::take_message(error));
+    }
+    if (!value) {
+        return result::ok(std::string{});
+    }
+
+    const std::string out(value);
+    OperationStatus free_status = free_cstring(value);
+    if (!is_ok(&free_status)) {
+        fprintf(stderr, "Failed to free merge conflicts report: %s\n", operation_status::take_message(free_status).c_str());
+    }
+    return result::ok(out);
+}
+
 StdLogosResult LogosBlockchainModule::participate(
     const std::string& config_path,
     const std::string& keystore_path,

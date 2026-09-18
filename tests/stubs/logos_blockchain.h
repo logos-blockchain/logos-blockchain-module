@@ -44,6 +44,11 @@ typedef struct {
     char* message;
 } OperationStatus;
 
+typedef struct {
+    bool source_insert_missing;
+    bool extra_insert_missing;
+} MergeConfigFlags;
+
 // Consensus state enum
 typedef enum { Bootstrapping, Online, NotStarted } State;
 
@@ -198,6 +203,7 @@ typedef struct { Hash value; OperationStatus error; } SubmitTransactionResult;
 typedef struct { Hash value; OperationStatus error; } FfiPoWClaimResult;
 typedef struct { PoWClaimableRewards value; OperationStatus error; } FfiPoWClaimableRewardsResult;
 typedef struct { char* value; OperationStatus error; } FfiGetChainIdResult;
+typedef struct { char* value; OperationStatus error; } FfiMergeUserConfigResult;
 typedef struct { NetworkInfo value; OperationStatus error; } FfiNetworkInfoResult;
 
 // Block event callback
@@ -223,6 +229,11 @@ OperationStatus migrate_user_config_0_1_2(
     const char* new_config_path,
     const char* old_config_path,
     const char* keystore_path);
+FfiMergeUserConfigResult merge_user_config(
+    const char* source_path,
+    const char* destination_path,
+    const char* extra_yaml,
+    MergeConfigFlags flags);
 OperationStatus participate(
     const char* config_path,
     const char* keystore_path,
