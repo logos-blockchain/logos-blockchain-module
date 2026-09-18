@@ -64,6 +64,17 @@ public:
         const std::string& old_config_path,
         const std::string& keystore_path
     );
+    // Merges source_path, then extra_yaml (optional, empty to skip), onto destination_path; overwriting it.
+    // Maps merge key by key; lists and tagged values are replaced whole.
+    // The flags insert keys missing from the destination instead of reporting them.
+    // On success the result value is the conflicts report (one per line), empty when there are none.
+    [[nodiscard]] static StdLogosResult merge_user_config(
+        const std::string& source_path,
+        const std::string& destination_path,
+        const std::string& extra_yaml,
+        bool source_insert_missing,
+        bool extra_insert_missing
+    );
     [[nodiscard]] static StdLogosResult participate(
         const std::string& config_path,
         const std::string& keystore_path,
