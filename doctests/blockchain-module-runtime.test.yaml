@@ -193,7 +193,7 @@ sections:
           rather than attempted and failed.
 
       - title: "Confirm genesis is already live"
-        run: "sleep 3; grep -i -E 'genesis|phase|chain_id|deployment|error' node.log | tail -20"
+        run: "sleep 3; sed 's/\\x1b\\[[0-9;]*m//g' node.log | grep -o -E 'genesis time [a-z ]+|entering [A-Za-z]+|Skipping IBD|ERROR.{0,60}' | uniq | tr '\\n' ';'"
         code_block: |
           grep -i genesis node.log
         expect_contains:
