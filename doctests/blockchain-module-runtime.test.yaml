@@ -77,7 +77,7 @@ sections:
       process — it does **not** start a blockchain node.
     steps:
       - title: "Start the daemon"
-        run: "./logos/bin/logoscore stop >/dev/null 2>&1; sleep 2; ./logos/bin/logoscore daemon --modules-dir ./modules --persistence-path ./data >/dev/null 2>&1 &"
+        run: "./logos/bin/logoscore stop >/dev/null 2>&1; sleep 2; ./logos/bin/logoscore daemon --modules-dir ./modules --persistence-path ./data >daemon.log 2>&1 &"
         code_block: |
           logoscore daemon --modules-dir ./modules --persistence-path ./data
 
@@ -191,6 +191,13 @@ sections:
           `AwaitingGenesisTime` indefinitely, with no error to explain it. The
           second and third are `skip_ibd` doing its job: bootstrap is bypassed
           rather than attempted and failed.
+
+      - title: "Confirm genesis is already live"
+        run: "sleep 3; grep -i -E 'genesis|phase|chain_id|deployment' daemon.log | tail -20; echo '--- tail ---'; tail -20 daemon.log"
+        code_block: |
+          grep -i genesis <daemon output>
+        expect_contains:
+          - "genesis time is already in the past"
 
   - title: "Query the chain"
     step: true
