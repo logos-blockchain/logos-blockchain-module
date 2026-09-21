@@ -7,6 +7,7 @@
 #include <charconv>
 #include <cstdio>
 #include <filesystem>
+#include <functional>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
@@ -52,6 +53,24 @@ namespace result {
         return err(operation_status::take_message(status));
     }
 } // namespace result
+
+namespace stream {
+    // Subscribes unless already subscribed. The flag is set first so two callers can't both subscribe.
+    static StdLogosResult subscribe(
+        std::atomic<bool>& subscribed,
+        const std::function<OperationStatus()>& subscribe_fn
+    ) {
+        bool expected = false;
+        if (!subscribed.compare_exchange_strong(expected, true)) {
+            return result::err("The stream is already subscribed.");
+        }
+        OperationStatus status = subscribe_fn();
+        if (!is_ok(&status)) {
+            subscribed = false;
+        }
+        return result::from_operation_status(status);
+    }
+} // namespace stream
 
 namespace {
     // Rust `File::open` / `deserialize_config_at_path` only accept real filesystem paths. QML often
@@ -273,7 +292,13 @@ namespace {
 } // namespace
 
 void LogosBlockchainModule::on_new_block_callback(const char* block) {
-    if (!s_instance || !block) {
+    if (!s_instance) {
+        return;
+    }
+    if (!block) {
+        fprintf(stderr, "New block stream ended.\n");
+        s_instance->is_new_blocks_subscribed = false;
+        s_instance->newBlock("null");
         return;
     }
     fprintf(stderr, "Received new block: %s\n", block);
@@ -296,6 +321,7 @@ void LogosBlockchainModule::on_processed_block_callback(const char* event) {
     }
     if (!event) {
         fprintf(stderr, "Processed block stream ended.\n");
+        s_instance->is_processed_blocks_subscribed = false;
         s_instance->processedBlock("null");
         return;
     }
@@ -308,6 +334,7 @@ void LogosBlockchainModule::on_lib_block_callback(const char* event) {
     }
     if (!event) {
         fprintf(stderr, "LIB block stream ended.\n");
+        s_instance->is_lib_blocks_subscribed = false;
         s_instance->libBlock("null");
         return;
     }
@@ -453,16 +480,40 @@ StdLogosResult LogosBlockchainModule::start(const std::string& config_path, cons
     }
 
     s_instance = this;
-    OperationStatus subscribe_status = subscribe_to_new_blocks(node, on_new_block_callback);
-    if (!is_ok(&subscribe_status)) {
-        return result::err(operation_status::take_message(subscribe_status));
+    if (StdLogosResult rc = subscribe_to_new_blocks(); !rc.success) {
+        return rc;
     }
-    OperationStatus processed_status = subscribe_to_processed_blocks(node, on_processed_block_callback);
-    if (!is_ok(&processed_status)) {
-        return result::err(operation_status::take_message(processed_status));
+    if (StdLogosResult rc = subscribe_to_processed_blocks(); !rc.success) {
+        return rc;
     }
-    OperationStatus lib_status = subscribe_to_lib_blocks(node, on_lib_block_callback);
-    return result::from_operation_status(lib_status);
+    return subscribe_to_lib_blocks();
+}
+
+StdLogosResult LogosBlockchainModule::subscribe_to_new_blocks() {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+    return stream::subscribe(is_new_blocks_subscribed, [this] {
+        return ::subscribe_to_new_blocks(node, on_new_block_callback);
+    });
+}
+
+StdLogosResult LogosBlockchainModule::subscribe_to_processed_blocks() {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+    return stream::subscribe(is_processed_blocks_subscribed, [this] {
+        return ::subscribe_to_processed_blocks(node, on_processed_block_callback);
+    });
+}
+
+StdLogosResult LogosBlockchainModule::subscribe_to_lib_blocks() {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+    return stream::subscribe(is_lib_blocks_subscribed, [this] {
+        return ::subscribe_to_lib_blocks(node, on_lib_block_callback);
+    });
 }
 
 StdLogosResult LogosBlockchainModule::stop() {
@@ -479,6 +530,9 @@ StdLogosResult LogosBlockchainModule::stop() {
     }
 
     node = nullptr;
+    is_new_blocks_subscribed = false;
+    is_processed_blocks_subscribed = false;
+    is_lib_blocks_subscribed = false;
     return result::ok();
 }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,17 @@ public:
     // Lifecycle
     [[nodiscard]] StdLogosResult start(const std::string& config_path, const std::string& deployment);
     [[nodiscard]] StdLogosResult stop();
+
+    // Stream subscriptions
+    // start() subscribes to all streams. Call these again after a stream ended. Blocks sent while it was down are lost;
+    // fetch them with get_blocks. Fails if the node is not running or the stream is still subscribed.
+    //
+    // # Important
+    //
+    // Don't call these from a stream event on the node's thread: the node's runtime will panic.
+    [[nodiscard]] StdLogosResult subscribe_to_new_blocks();
+    [[nodiscard]] StdLogosResult subscribe_to_processed_blocks();
+    [[nodiscard]] StdLogosResult subscribe_to_lib_blocks();
 
     // State management
 
@@ -232,26 +244,30 @@ public:
 // Guard kept until https://github.com/llvm/llvm-project/issues/64763 lands.
 logos_events:
     // Fired by on_new_block_callback when the Rust node delivers a new block.
-    // blockJson is the full block serialized as JSON.
+    // `blockJson` is the full block serialized as JSON.
+    // When the stream ends a JSON literal `null` is sent. Call `subscribe_to_new_blocks` to keep receiving events.
     // ReSharper disable once CppFunctionIsNotImplemented
     void newBlock(const std::string& blockJson);
-    // Fired per processed block. eventJson carries the block plus the chain
-    // state after processing it (same schema as the node's
-    // `/cryptarchia/blocks/stream` HTTP endpoint; transaction ids at
-    // `transactions[].mantle_tx.hash`). When the stream ends, fired exactly
-    // once with the JSON literal `null` — restart the node subscription (via
-    // stop/start) to keep receiving events.
+    // Fired per processed block. eventJson carries the block plus the chain state after processing it (same schema as
+    // the node's `/cryptarchia/blocks/stream` HTTP endpoint; transaction ids at `transactions[].mantle_tx.hash`).
+    // When the stream ends a JSON literal `null` is sent. Call `subscribe_to_processed_blocks` to keep receiving
+    // events.
     // ReSharper disable once CppFunctionIsNotImplemented
     void processedBlock(const std::string& eventJson);
-    // Fired per newly finalized (LIB) block. blockInfoJson uses the same
-    // schema as the node's `/cryptarchia/lib/stream` HTTP endpoint. When the
-    // stream ends, fired exactly once with the JSON literal `null`.
+    // Fired per newly finalized (LIB) block. blockInfoJson uses the same schema as the node's `/cryptarchia/lib/stream`
+    // HTTP endpoint.
+    // When the stream ends a JSON literal `null` is sent. Call `subscribe_to_lib_blocks` to keep receiving events.
     // ReSharper disable once CppFunctionIsNotImplemented
     void libBlock(const std::string& blockInfoJson);
     // clang-format on
 
 private:
     LogosBlockchainNode* node = nullptr;
+
+    // Whether each stream is currently subscribed
+    std::atomic<bool> is_new_blocks_subscribed{false};
+    std::atomic<bool> is_processed_blocks_subscribed{false};
+    std::atomic<bool> is_lib_blocks_subscribed{false};
 
     // Static instance for C callback (C API doesn't support user data)
     static LogosBlockchainModule* s_instance;
