@@ -14,7 +14,6 @@ const POLL_INTERVAL: Duration = Duration::from_secs(5);
 
 static LAST_HEIGHT: AtomicI64 = AtomicI64::new(-1);
 static POLL_COUNT: AtomicI64 = AtomicI64::new(0);
-// The generated scaffold already imports std::sync::Mutex; refer to it by path.
 static LAST_INFO: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
 static LAST_ERROR: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
 
@@ -23,42 +22,23 @@ fn blockchain() -> &'static BlockchainModuleClient {
     CLIENT.get_or_init(BlockchainModuleClient::new)
 }
 
-/// Polls once; `value` in the module's `{success, value, error}` envelope is a JSON string.
 fn poll_once() -> i64 {
     POLL_COUNT.fetch_add(1, Ordering::SeqCst);
-    match blockchain().get_cryptarchia_info() {
-        Ok(reply) => {
-            let ok = reply.get("success").and_then(|s| s.as_bool()).unwrap_or(true);
-            if !ok {
-                let err = reply
-                    .get("error")
-                    .map(|e| e.to_string())
-                    .unwrap_or_else(|| reply.to_string());
-                eprintln!("{TAG}: get_cryptarchia_info refused: {err}");
-                *LAST_ERROR.lock().unwrap() = err;
-                return -1;
-            }
-            let info = match reply.get("value") {
-                Some(serde_json::Value::String(s)) => {
-                    serde_json::from_str(s).unwrap_or(serde_json::Value::String(s.clone()))
-                }
-                Some(v) => v.clone(),
-                None => reply.clone(),
-            };
-            let height = info.get("height").and_then(|h| h.as_i64()).unwrap_or(-1);
-            let slot = info.get("slot").and_then(|s| s.as_i64()).unwrap_or(-1);
-            let mode = info
-                .get("mode")
-                .map(|m| m.to_string())
-                .unwrap_or_else(|| "?".to_string());
-            eprintln!("{TAG}: height={height} slot={slot} mode={mode}");
+    match blockchain().cryptarchia_info() {
+        Ok(info) => {
+            let height = i64::try_from(info.height).unwrap_or(-1);
+            eprintln!("{TAG}: height={height} slot={} mode={:?}", info.slot.into_inner(), info.mode);
             LAST_HEIGHT.store(height, Ordering::SeqCst);
-            *LAST_INFO.lock().unwrap() = info.to_string();
+            *LAST_INFO.lock().unwrap() = serde_json::json!({
+                "height": info.height, "slot": info.slot, "lib_slot": info.lib_slot,
+                "tip": info.tip, "lib": info.lib, "mode": format!("{:?}", info.mode),
+            })
+            .to_string();
             LAST_ERROR.lock().unwrap().clear();
             height
         }
         Err(e) => {
-            eprintln!("{TAG}: get_cryptarchia_info failed: {e}");
+            eprintln!("{TAG}: {e}");
             *LAST_ERROR.lock().unwrap() = e.to_string();
             -1
         }
