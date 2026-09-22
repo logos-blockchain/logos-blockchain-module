@@ -1,0 +1,30 @@
+{
+  "name": "blockchain_client_example",
+  "display_name": "Blockchain Client Example",
+  "version": "0.0.999",
+  "description": "Example Rust module: polls blockchain_module's chain height every 5 seconds through the generated logos-blockchain-client crate",
+  "author": "Logos Blockchain Team",
+  "type": "core",
+  "interface": "cdylib",
+  "category": "blockchain",
+  "main": "blockchain_client_example_plugin",
+  "dependencies": ["blockchain_module"],
+  "include": [],
+  "capabilities": [],
+
+  "codegen": {
+    "lidl": "rust-lib/blockchain_client_example.lidl"
+  },
+
+  "nix": {
+    "external_libraries": [],
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "cmake": {
+      "find_packages": [],
+      "extra_include_dirs": []
+    }
+  }
+}
