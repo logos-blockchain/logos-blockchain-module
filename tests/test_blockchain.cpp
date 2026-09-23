@@ -2156,9 +2156,7 @@ LOGOS_TEST(lib_block_stream_forwards_json_and_null_sentinel) {
     delete module;
 }
 
-// The legacy new-block stream never sends NULL, but the trampoline must not
-// crash if it ever does (regression test for the added guard).
-LOGOS_TEST(new_block_callback_ignores_null_pointer) {
+LOGOS_TEST(new_block_stream_forwards_wrapped_json_and_null_sentinel) {
     auto t = LogosTestContext("blockchain_module");
     TempDir tmpDir;
     auto* module = createStartedModule(t, tmpDir);
@@ -2166,8 +2164,95 @@ LOGOS_TEST(new_block_callback_ignores_null_pointer) {
     LOGOS_ASSERT_TRUE(g_lastNewBlockCallback != nullptr);
 
     g_lastNewBlockEventJson.clear();
+    g_lastNewBlockCallback(R"({"slot":1})");
+    LOGOS_ASSERT_EQ(g_lastNewBlockEventJson, std::string(R"({"block":"{\"slot\":1}"})"));
+
     g_lastNewBlockCallback(nullptr);
-    LOGOS_ASSERT_EQ(g_lastNewBlockEventJson, std::string());
+    LOGOS_ASSERT_EQ(g_lastNewBlockEventJson, std::string("null"));
+    delete module;
+}
+
+// ============================================================================
+// Stream subscription
+// ============================================================================
+
+LOGOS_TEST(subscribe_fails_when_node_not_running) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+
+    LOGOS_ASSERT_FALSE(module.subscribe_to_new_blocks().success);
+    LOGOS_ASSERT_FALSE(module.subscribe_to_processed_blocks().success);
+    LOGOS_ASSERT_FALSE(module.subscribe_to_lib_blocks().success);
+    LOGOS_ASSERT_FALSE(t.cFunctionCalled("subscribe_to_new_blocks"));
+}
+
+LOGOS_TEST(subscribe_refuses_while_subscribed) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    StdLogosResult result = module->subscribe_to_new_blocks();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "already subscribed"));
+    LOGOS_ASSERT_FALSE(module->subscribe_to_processed_blocks().success);
+    LOGOS_ASSERT_FALSE(module->subscribe_to_lib_blocks().success);
+    LOGOS_ASSERT_EQ(t.cFunctionCallCount("subscribe_to_new_blocks"), 1);
+    LOGOS_ASSERT_EQ(t.cFunctionCallCount("subscribe_to_processed_blocks"), 1);
+    LOGOS_ASSERT_EQ(t.cFunctionCallCount("subscribe_to_lib_blocks"), 1);
+    delete module;
+}
+
+LOGOS_TEST(subscribe_after_stream_ended) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    g_lastNewBlockCallback(nullptr);
+    g_lastProcessedBlockCallback(nullptr);
+    g_lastLibBlockCallback(nullptr);
+
+    LOGOS_ASSERT_TRUE(module->subscribe_to_new_blocks().success);
+    LOGOS_ASSERT_TRUE(module->subscribe_to_processed_blocks().success);
+    LOGOS_ASSERT_TRUE(module->subscribe_to_lib_blocks().success);
+    LOGOS_ASSERT_EQ(t.cFunctionCallCount("subscribe_to_new_blocks"), 2);
+    LOGOS_ASSERT_EQ(t.cFunctionCallCount("subscribe_to_processed_blocks"), 2);
+    LOGOS_ASSERT_EQ(t.cFunctionCallCount("subscribe_to_lib_blocks"), 2);
+
+    // Subscribed again, so a second subscribe is refused.
+    LOGOS_ASSERT_FALSE(module->subscribe_to_new_blocks().success);
+    delete module;
+}
+
+LOGOS_TEST(subscribe_can_retry_after_failure) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    g_lastNewBlockCallback(nullptr);
+
+    t.mockCFunction("subscribe_to_new_blocks").returns(1);
+    StdLogosResult failed = module->subscribe_to_new_blocks();
+    LOGOS_ASSERT_FALSE(failed.success);
+    LOGOS_ASSERT_TRUE(contains(failed.error, "mock error"));
+
+    t.mockCFunction("subscribe_to_new_blocks").returns(0);
+    LOGOS_ASSERT_TRUE(module->subscribe_to_new_blocks().success);
+    delete module;
+}
+
+LOGOS_TEST(restart_subscribes_streams_again) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    // stop() clears the active flags even though no NULL is delivered.
+    LOGOS_ASSERT_TRUE(module->stop().success);
+    LOGOS_ASSERT_TRUE(module->start(tmpDir.filePath("config.json"), "").success);
+    LOGOS_ASSERT_EQ(t.cFunctionCallCount("subscribe_to_new_blocks"), 2);
     delete module;
 }
 
