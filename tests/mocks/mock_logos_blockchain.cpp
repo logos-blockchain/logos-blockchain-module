@@ -561,6 +561,47 @@ OperationStatus free_pow_claimable_rewards(PoWClaimableRewards rewards) {
     return make_status(0);
 }
 
+// PoW status mock storage (up to 4 auto-claim targets)
+static PoWClaimTargetStatus s_mockClaimTargets[4];
+
+FfiPoWStatusResult pow_status(LogosBlockchainNode* node) {
+    LOGOS_CMOCK_RECORD("pow_status");
+    FfiPoWStatusResult result;
+    int err = LOGOS_CMOCK_RETURN(int, "pow_status_error");
+    result.error = make_status(err);
+    result.value = PoWStatus{};
+    if (err == 0) {
+        result.value.is_mining = LOGOS_CMOCK_RETURN(int, "pow_status_is_mining") != 0;
+        result.value.are_rewards_enabled = LOGOS_CMOCK_RETURN(int, "pow_status_are_rewards_enabled") != 0;
+        result.value.auto_claim.is_armed = LOGOS_CMOCK_RETURN(int, "pow_status_is_auto_claim_armed") != 0;
+        result.value.auto_claim.tick = static_cast<uint64_t>(LOGOS_CMOCK_RETURN(int, "pow_status_tick"));
+        // Non-zero selects slots, so the default (0) keeps the seconds unit.
+        result.value.auto_claim.tick_unit =
+            LOGOS_CMOCK_RETURN(int, "pow_status_tick_in_slots") != 0 ? Slots : Seconds;
+
+        int count = LOGOS_CMOCK_RETURN(int, "pow_status_targets_count");
+        if (count > 4) count = 4;
+        if (count < 0) count = 0;
+        for (int i = 0; i < count; ++i) {
+            // Target i is keyed by 0xA0 + i, wants 1000 + i, and holds 10 + i.
+            memset(s_mockClaimTargets[i].public_key, 0xA0 + i, sizeof(s_mockClaimTargets[i].public_key));
+            s_mockClaimTargets[i].threshold = static_cast<uint64_t>(1000 + i);
+            // A non-zero flag drops every balance, mimicking an unreadable wallet.
+            bool unreadable = LOGOS_CMOCK_RETURN(int, "pow_status_balance_unreadable") != 0;
+            s_mockClaimTargets[i].balance.is_some = !unreadable;
+            s_mockClaimTargets[i].balance.value = unreadable ? 0 : static_cast<uint64_t>(10 + i);
+        }
+        result.value.auto_claim.targets = count > 0 ? s_mockClaimTargets : nullptr;
+        result.value.auto_claim.targets_len = static_cast<size_t>(count);
+    }
+    return result;
+}
+
+OperationStatus free_pow_status(PoWStatus status) {
+    LOGOS_CMOCK_RECORD("free_pow_status");
+    return make_status(0);
+}
+
 OperationStatus free_cstring(char* s) {
     LOGOS_CMOCK_RECORD("free_cstring");
     free(s);

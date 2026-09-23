@@ -249,6 +249,7 @@ public:
     // Rewards this node can currently claim, as JSON:
     //   { claimable_tickets, slots_until_expiry: [ ... ] }
     [[nodiscard]] StdLogosResult pow_claimable_rewards() const;
+    [[nodiscard]] StdLogosResult pow_status() const;
 
     // Writes the pow section into an already-generated config; the node reads it
     // on the next start(). Every field is optional and an absent one is left as

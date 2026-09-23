@@ -170,6 +170,40 @@ typedef struct {
     size_t len;
 } PoWClaimableRewards;
 
+// How often the auto-claim ticker fires.
+typedef enum { Seconds, Slots } PoWAutoClaimTickUnit;
+
+// Optional u64 (cbindgen monomorphizes FfiOption<Value>).
+typedef struct {
+    bool is_some;
+    uint64_t value;
+} FfiOption_Value;
+
+// One auto-claim target: the key paid, the balance it should reach, and the
+// balance it currently holds (absent when the wallet couldn't be read).
+typedef struct {
+    uint8_t public_key[32];
+    uint64_t threshold;
+    FfiOption_Value balance;
+} PoWClaimTargetStatus;
+
+// Runtime state of unattended claiming. The tick is two fields because C can't
+// hold the period inside the unit the way the node's Rust enum does.
+typedef struct {
+    bool is_armed;
+    uint64_t tick;
+    PoWAutoClaimTickUnit tick_unit;
+    PoWClaimTargetStatus* targets;
+    size_t targets_len;
+} PoWAutoClaimStatus;
+
+// Runtime state of the PoW service.
+typedef struct {
+    bool is_mining;
+    bool are_rewards_enabled;
+    PoWAutoClaimStatus auto_claim;
+} PoWStatus;
+
 typedef struct {
     uint64_t slot_duration_ms;
     int64_t genesis_time_unix_ms;
@@ -202,6 +236,7 @@ typedef struct { TimeInfo* value; OperationStatus error; } TimeInfoResult;
 typedef struct { Hash value; OperationStatus error; } SubmitTransactionResult;
 typedef struct { Hash value; OperationStatus error; } FfiPoWClaimResult;
 typedef struct { PoWClaimableRewards value; OperationStatus error; } FfiPoWClaimableRewardsResult;
+typedef struct { PoWStatus value; OperationStatus error; } FfiPoWStatusResult;
 typedef struct { char* value; OperationStatus error; } FfiGetChainIdResult;
 typedef struct { char* value; OperationStatus error; } FfiMergeUserConfigResult;
 typedef struct { NetworkInfo value; OperationStatus error; } FfiNetworkInfoResult;
@@ -324,6 +359,8 @@ OperationStatus pow_stop_auto_claim(LogosBlockchainNode* node);
 FfiPoWClaimResult pow_claim(LogosBlockchainNode* node, const uint8_t* claim_address);
 FfiPoWClaimableRewardsResult pow_claimable_rewards(LogosBlockchainNode* node);
 OperationStatus free_pow_claimable_rewards(PoWClaimableRewards rewards);
+FfiPoWStatusResult pow_status(LogosBlockchainNode* node);
+OperationStatus free_pow_status(PoWStatus status);
 
 OperationStatus free_cstring(char* s);
 
