@@ -13,6 +13,10 @@ logos_module(
     SOURCES
         src/logos_blockchain_module.h
         src/logos_blockchain_module.cpp
+        src/user_config_reader.h
+        src/user_config_reader.cpp
     EXTERNAL_LIBS
         logos_blockchain
+    LINK_LIBRARIES
+        fyaml
 )

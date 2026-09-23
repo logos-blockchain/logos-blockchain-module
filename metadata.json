@@ -20,13 +20,16 @@
     "liblogos_blockchain.dll",
     "blockchain_module_plugin.dylib",
     "blockchain_module_plugin.so",
-    "blockchain_module_plugin.dll"
+    "blockchain_module_plugin.dll",
+    "libfyaml.so.0",
+    "libfyaml.0.dylib",
+    "libfyaml.dylib"
   ],
 
   "nix": {
     "packages": {
       "build": [],
-      "runtime": ["nlohmann_json", "boost"]
+      "runtime": ["nlohmann_json", "boost", "libfyaml","libfyaml.out"]
     },
     "external_libraries": [
       { "name": "logos_blockchain" }
