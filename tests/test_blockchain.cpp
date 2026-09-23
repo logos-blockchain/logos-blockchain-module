@@ -91,6 +91,8 @@ extern std::string g_lastGeneratedOutput;
 extern std::string g_lastGeneratedStatePath;
 extern std::string g_lastGeneratedStoragePath;
 extern std::string g_lastGeneratedLogsPath;
+extern std::string g_lastMergeExtraYaml;
+extern MergeConfigFlags g_lastMergeFlags;
 
 static void clearGeneratedPaths() {
     g_lastGeneratedOutput.clear();
@@ -2329,6 +2331,49 @@ LOGOS_TEST(migrate_user_config_0_1_2_returns_1_on_failure) {
     t.mockCFunction("migrate_user_config_0_1_2").returns(1);
 
     LOGOS_ASSERT_FALSE(module.migrate_user_config_0_1_2("/tmp/new.yaml", "/tmp/old.yaml", "/tmp/keystore.yaml").success);
+}
+
+LOGOS_TEST(merge_user_config_returns_empty_report_without_conflicts) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+
+    t.mockCFunction("merge_user_config").returns("");
+    t.mockCFunction("merge_user_config_error").returns(0);
+
+    StdLogosResult result = module.merge_user_config("/tmp/src.yaml", "/tmp/dst.yaml", "", false, false);
+    LOGOS_ASSERT_TRUE(result.success);
+    LOGOS_ASSERT_EQ(result.value.get<std::string>(), std::string(""));
+    LOGOS_ASSERT(t.cFunctionCalled("merge_user_config"));
+    LOGOS_ASSERT_EQ(g_lastMergeExtraYaml, std::string("<null>"));
+    LOGOS_ASSERT_FALSE(t.cFunctionCalled("free_cstring"));
+}
+
+LOGOS_TEST(merge_user_config_returns_conflicts_report) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+
+    t.mockCFunction("merge_user_config").returns("a.b: missing in destination\nc: missing in destination");
+    t.mockCFunction("merge_user_config_error").returns(0);
+
+    StdLogosResult result = module.merge_user_config("/tmp/src.yaml", "/tmp/dst.yaml", "c: 3", true, false);
+    LOGOS_ASSERT_TRUE(result.success);
+    LOGOS_ASSERT_EQ(
+        result.value.get<std::string>(),
+        std::string("a.b: missing in destination\nc: missing in destination")
+    );
+    LOGOS_ASSERT_EQ(g_lastMergeExtraYaml, std::string("c: 3"));
+    LOGOS_ASSERT_TRUE(g_lastMergeFlags.source_insert_missing);
+    LOGOS_ASSERT_FALSE(g_lastMergeFlags.extra_insert_missing);
+    LOGOS_ASSERT(t.cFunctionCalled("free_cstring"));
+}
+
+LOGOS_TEST(merge_user_config_returns_error_on_ffi_failure) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+
+    t.mockCFunction("merge_user_config_error").returns(1);
+
+    LOGOS_ASSERT_FALSE(module.merge_user_config("/tmp/src.yaml", "/tmp/dst.yaml", "", false, false).success);
 }
 
 LOGOS_TEST(participate_returns_0_on_success) {
