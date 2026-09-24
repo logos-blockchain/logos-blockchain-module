@@ -353,7 +353,7 @@ namespace {
                 "Claim address " + out_hex + " is not in wallet.known_keys, so the node would refuse to start.";
             return false;
         }
-        return true;
+        greturn true;
     }
 
     // A u64 does not survive a round trip through QML's doubles, so thresholds
@@ -551,14 +551,8 @@ StdLogosResult LogosBlockchainModule::generate_user_config(const std::string& js
         return result::err(std::string("Failed to parse JSON args: ") + e.what());
     }
 
-    // The module-context getters are populated by every logos-core host
-    // (logoscore-cli and Basecamp alike), so their mere presence can't tell the
-    // two apart. The bundled app therefore opts in explicitly by passing
-    // "use_persistence_paths": true; only then do we route the node's runtime
-    // directories — state, storage (db) and logs — under the host-owned
-    // per-instance persistence dir, so they all share one writable base. CLI and
-    // standalone callers omit the flag and keep their own paths (or the node
-    // defaults). Any path the caller set explicitly is left untouched.
+    // When the caller passes `"use_persistence_paths": true`, state and logs go under
+    // the instance's persistence directory, unless the caller already set them.
     bool use_persistence_paths = false;
     if (const auto it = parsed_args.find("use_persistence_paths"); it != parsed_args.end() && it->is_boolean()) {
         use_persistence_paths = it->get<bool>();
@@ -577,7 +571,6 @@ StdLogosResult LogosBlockchainModule::generate_user_config(const std::string& js
                     parsed_args[key] = value;
             };
             set_if_absent("state_path", state_dir(persistence).string());
-            set_if_absent("storage_path", (base / "db").string());
             set_if_absent("logs_path", (base / "logs").string());
 
             // The config file itself is written under the same base, using the
@@ -599,7 +592,7 @@ StdLogosResult LogosBlockchainModule::generate_user_config(const std::string& js
 
             fprintf(
                 stderr,
-                "generate_user_config: routing output/state/storage/logs under instance persistence path: %s\n",
+                "generate_user_config: routing output/state/logs under instance persistence path: %s\n",
                 persistence.c_str()
             );
         } else {

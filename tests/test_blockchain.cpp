@@ -121,7 +121,7 @@ LOGOS_TEST(generate_user_config_routes_paths_under_persistence_when_flagged) {
     LOGOS_ASSERT_EQ(result.value.get<std::string>(), std::string("/persist/data/config/user_config.yaml"));
     LOGOS_ASSERT_EQ(g_lastGeneratedOutput, std::string("/persist/data/config/user_config.yaml"));
     LOGOS_ASSERT_EQ(g_lastGeneratedStatePath, std::string("/persist/data/state"));
-    LOGOS_ASSERT_EQ(g_lastGeneratedStoragePath, std::string("/persist/data/db"));
+    LOGOS_ASSERT_EQ(g_lastGeneratedStoragePath, std::string("<null>"));
     LOGOS_ASSERT_EQ(g_lastGeneratedLogsPath, std::string("/persist/data/logs"));
 }
 
@@ -186,7 +186,7 @@ LOGOS_TEST(generate_user_config_explicit_path_wins_over_flag) {
         module.generate_user_config(
             R"({"output":"/tmp/out.json","state_path":"/tmp/state","use_persistence_paths":true})").success);
     LOGOS_ASSERT_EQ(g_lastGeneratedStatePath, std::string("/tmp/state"));
-    LOGOS_ASSERT_EQ(g_lastGeneratedStoragePath, std::string("/persist/data/db"));
+    LOGOS_ASSERT_EQ(g_lastGeneratedStoragePath, std::string("<null>"));
     LOGOS_ASSERT_EQ(g_lastGeneratedLogsPath, std::string("/persist/data/logs"));
 }
 
