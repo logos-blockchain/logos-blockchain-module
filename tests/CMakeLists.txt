@@ -9,6 +9,7 @@ logos_test(
     NAME blockchain_module_tests
     MODULE_SOURCES
         ../src/logos_blockchain_module.cpp
+        ../src/user_config_reader.cpp
     TEST_SOURCES
         main.cpp
         test_blockchain.cpp
@@ -17,6 +18,8 @@ logos_test(
         mocks/mock_logos_blockchain.cpp
     EXTRA_INCLUDES
         stubs
+    EXTRA_LINK_LIBS
+        fyaml
 )
 
 # Integration tests (real logos_blockchain library)
@@ -33,6 +36,7 @@ if(LIBLOGOS_BLOCKCHAIN_PATH)
         NAME blockchain_module_integration_tests
         MODULE_SOURCES
             ../src/logos_blockchain_module.cpp
+            ../src/user_config_reader.cpp
         TEST_SOURCES
             main.cpp
             test_blockchain.cpp
@@ -41,6 +45,7 @@ if(LIBLOGOS_BLOCKCHAIN_PATH)
             ../lib
         EXTRA_LINK_LIBS
             ${LIBLOGOS_BLOCKCHAIN_PATH}
+            fyaml
     )
 
     get_filename_component(LIBLOGOS_BLOCKCHAIN_DIR "${LIBLOGOS_BLOCKCHAIN_PATH}" DIRECTORY)

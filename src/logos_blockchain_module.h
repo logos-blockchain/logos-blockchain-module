@@ -250,6 +250,33 @@ public:
     //   { claimable_tickets, slots_until_expiry: [ ... ] }
     [[nodiscard]] StdLogosResult pow_claimable_rewards() const;
 
+    // Writes the pow section into an already-generated config; the node reads it
+    // on the next start(). Every field is optional and an absent one is left as
+    // it was. An empty auto_claim_targets turns auto-claim off.
+    //   { "max_threads": <u64> | null,   // null = one thread per logical CPU
+    //     "max_tickets_per_block": <u64>, "tick_seconds": <u64>,
+    //     "auto_claim_targets": [ { "public_key": "<hex>",   // "" = leader key
+    //                               "threshold": <u64> } ] }
+    [[nodiscard]] static StdLogosResult pow_configure(
+        const std::string& config_path,
+        const std::string& config_json
+    );
+
+    // The accounts a config records, named from the keystore beside it. Titles
+    // come back empty if the keystore cannot be read. keystore_keys is every
+    // key the keystore holds, including ones the config never names.
+    //   { "accounts": [ { "public_key": "<hex>", "title": "<name>",
+    //                     "roles": ["leader_funding"|"sdp_funding"|
+    //                               "voucher_master"|"blend_signing"] } ],
+    //     "keystore_keys": [ { "key_id": "<hex>", "title": "<name>" } ] }
+    [[nodiscard]] static StdLogosResult read_accounts(const std::string& config_path);
+
+    // The pow section as the config holds it, in the shape pow_configure takes.
+    //   { "max_threads": "<u64>"|null, "max_tickets_per_block": "<u64>",
+    //     "tick_seconds": "<u64>",
+    //     "auto_claim_targets": [ { "public_key", "threshold" } ] }
+    [[nodiscard]] static StdLogosResult read_pow_config(const std::string& config_path);
+
     // clang-format off
 // Clang-format only handles public/private/protected, so it miss-indents this section.
 // Guard kept until https://github.com/llvm/llvm-project/issues/64763 lands.

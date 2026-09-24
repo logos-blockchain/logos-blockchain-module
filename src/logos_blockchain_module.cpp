@@ -1,5 +1,7 @@
 #include "logos_blockchain_module.h"
 
+#include "user_config_reader.h"
+
 #include <algorithm>
 #include <boost/algorithm/hex.hpp>
 #include <boost/algorithm/string/trim.hpp>
@@ -7,6 +9,7 @@
 #include <charconv>
 #include <cstdio>
 #include <filesystem>
+#include <map>
 #include <functional>
 #include <nlohmann/json.hpp>
 #include <string>
@@ -289,6 +292,189 @@ namespace {
             }
         }
     };
+
+    // Whether wallet.known_keys maps any entry to `value`. The wallet only
+    // indexes keys it is told to track.
+    bool tracks_key(const UserConfigReader& config, const std::string& value) {
+        const std::vector<UserConfigReader::Entry> keys = config.entriesAt("/wallet/known_keys");
+        return std::any_of(keys.begin(), keys.end(), [&value](const UserConfigReader::Entry& e) {
+            return e.second == value;
+        });
+    }
+
+    // One validated auto-claim destination, in the shape the node's config uses.
+    struct ClaimTargetEntry {
+        std::string public_key;
+        uint64_t threshold;
+    };
+
+    // Canonicalises one target against an already-read config. An empty key
+    // resolves to the leader's funding key, which PoS stakes from. Checked
+    // against wallet.known_keys the way the node's own validate_claim_targets
+    // does, so a config that would fail to boot is an error the caller can still
+    // act on.
+    bool canonical_claim_target(
+        const UserConfigReader& config,
+        const std::string& config_path,
+        const std::string& requested_hex,
+        std::string& out_hex,
+        std::string& error
+    ) {
+        std::string target_hex = requested_hex;
+        boost::algorithm::trim(target_hex);
+        if (target_hex.empty()) {
+            target_hex = config.scalarAt("/cryptarchia/leader/wallet/funding_pk");
+            if (target_hex.empty()) {
+                error = "cryptarchia.leader.wallet.funding_pk not found in " + config_path + ".";
+                return false;
+            }
+        }
+
+        // Canonicalise before comparing and writing: the caller may pass a 0x
+        // prefix or upper case, neither of which the node's own config uses.
+        const std::vector<uint8_t> target_bytes = parse_address_hex(target_hex);
+        if (static_cast<int>(target_bytes.size()) != ADDRESS_BYTES) {
+            error = "Invalid claim address (64 hex characters or empty).";
+            return false;
+        }
+        out_hex = bytes_to_hex(target_bytes.data(), target_bytes.size());
+
+        // A wallet section that is not a mapping would read as holding no keys,
+        // rejecting every target as untracked. Say what is actually wrong.
+        if (!config.isMappingAt("/wallet/known_keys")) {
+            error = "wallet.known_keys in " + config_path + " is not a block mapping.";
+            return false;
+        }
+
+        // The wallet only indexes keys it is told to track; the node aborts
+        // startup rather than claim into an unlisted one.
+        if (!tracks_key(config, out_hex)) {
+            error =
+                "Claim address " + out_hex + " is not in wallet.known_keys, so the node would refuse to start.";
+            return false;
+        }
+        return true;
+    }
+
+    // A u64 does not survive a round trip through QML's doubles, so thresholds
+    // arrive as text; accept a JSON number too for callers that can send one.
+    bool parse_threshold(const nlohmann::json& raw, uint64_t& out, std::string& error) {
+        if (raw.is_number_unsigned()) {
+            out = raw.get<uint64_t>();
+            return true;
+        }
+        if (!raw.is_string()) {
+            error = "threshold must be a non-negative integer or a decimal string.";
+            return false;
+        }
+        std::string text = raw.get<std::string>();
+        boost::algorithm::trim(text);
+        const char* const begin = text.data();
+        const char* const end = begin + text.size();
+        const auto [ptr, ec] = std::from_chars(begin, end, out);
+        if (ec != std::errc() || ptr != end) {
+            error = "Invalid threshold '" + text + "'.";
+            return false;
+        }
+        return true;
+    }
+
+    // Absent and Null are distinct: Absent means "leave this alone", and
+    // max_threads is an Option on the node's side, so null is a real value.
+    // Non-Option fields reject Null rather than write a config that then fails
+    // to deserialize at startup.
+    enum class FieldState { Absent, Null, Set };
+
+    bool read_optional_u64(
+        const nlohmann::json& obj,
+        const char* key,
+        uint64_t& out,
+        FieldState& state,
+        std::string& error
+    ) {
+        const auto it = obj.find(key);
+        if (it == obj.end()) {
+            state = FieldState::Absent;
+            return true;
+        }
+        if (it->is_null()) {
+            state = FieldState::Null;
+            return true;
+        }
+        state = FieldState::Set;
+        if (!parse_threshold(*it, out, error)) {
+            error = std::string(key) + ": " + error;
+            return false;
+        }
+        return true;
+    }
+
+    // Rejects field names this API does not know, so a typo like "max_thread" is
+    // not dropped and reported back as a successful write. Matches the node's own
+    // OnUnknownKeys::Fail.
+    bool reject_unknown_fields(
+        const nlohmann::json& obj,
+        const std::vector<std::string>& known,
+        const std::string& what,
+        std::string& error
+    ) {
+        std::string unknown;
+        size_t count = 0;
+        for (const auto& item : obj.items()) {
+            if (std::find(known.begin(), known.end(), item.key()) != known.end())
+                continue;
+            if (count > 0)
+                unknown += ", ";
+            unknown += item.key();
+            ++count;
+        }
+        if (count == 0) {
+            return true;
+        }
+        error = "Unknown " + what + (count > 1 ? " fields: " : " field: ") + unknown + ".";
+        return false;
+    }
+
+    // The pow section as a YAML fragment carrying only the fields the caller
+    // set. merge_user_config merges it key by key, so an omitted field is left
+    // alone and a list is replaced whole — which is exactly the contract this
+    // API promises. Empty parents are never emitted: `mining:` with nothing
+    // under it is a null, and merging a null would wipe the section.
+    std::string pow_fragment(
+        const std::string& max_threads, const std::string& max_tickets,
+        const std::string& tick_seconds, const std::vector<ClaimTargetEntry>* targets
+    ) {
+        std::string mining;
+        if (!max_threads.empty())
+            mining += "    max_threads: " + max_threads + "\n";
+        if (!max_tickets.empty())
+            mining += "    max_tickets_per_block: " + max_tickets + "\n";
+
+        std::string auto_claim;
+        if (!tick_seconds.empty()) {
+            auto_claim += "    tick:\n";
+            auto_claim += "      unit: seconds\n";
+            auto_claim += "      value: " + tick_seconds + "\n";
+        }
+        if (targets) {
+            if (targets->empty()) {
+                auto_claim += "    targets: []\n";
+            } else {
+                auto_claim += "    targets:\n";
+                for (const ClaimTargetEntry& target : *targets) {
+                    auto_claim += "    - public_key: " + target.public_key + "\n";
+                    auto_claim += "      threshold: " + std::to_string(target.threshold) + "\n";
+                }
+            }
+        }
+
+        std::string yaml = "pow:\n";
+        if (!mining.empty())
+            yaml += "  mining:\n" + mining;
+        if (!auto_claim.empty())
+            yaml += "  auto_claim:\n" + auto_claim;
+        return yaml;
+    }
 } // namespace
 
 void LogosBlockchainModule::on_new_block_callback(const char* block) {
@@ -721,6 +907,277 @@ StdLogosResult LogosBlockchainModule::remove_key(
 }
 
 // Identity
+StdLogosResult LogosBlockchainModule::pow_configure(
+    const std::string& config_path,
+    const std::string& config_json
+) {
+    const fs::path config = localPathFromFileUrl(config_path);
+    if (config.empty()) {
+        return result::err("Config path was not specified.");
+    }
+
+    nlohmann::json parsed;
+    try {
+        parsed = nlohmann::json::parse(config_json);
+    } catch (const nlohmann::json::exception& e) {
+        return result::err(std::string("Invalid PoW config JSON: ") + e.what());
+    }
+    if (!parsed.is_object()) {
+        return result::err("config_json must be a JSON object.");
+    }
+
+    std::string error;
+    if (!reject_unknown_fields(
+            parsed,
+            {"max_threads", "max_tickets_per_block", "tick_seconds", "auto_claim_targets"},
+            "PoW config", error
+        )) {
+        return result::err(std::move(error));
+    }
+
+    UserConfigReader reader;
+    if (!reader.load(config, error)) {
+        return result::err(std::move(error));
+    }
+
+    // Everything is validated against the file as read before anything is
+    // written. The write itself is one merge_user_config call, so a rejected
+    // field cannot leave the accepted ones applied.
+    struct ScalarField {
+        const char* name;
+        bool nullable;
+    };
+    static constexpr ScalarField kScalars[] = {
+        {"max_threads", true},
+        {"max_tickets_per_block", false},
+        {"tick_seconds", false},
+    };
+    enum ScalarIndex { MaxThreads, MaxTickets, TickSeconds, ScalarCount };
+
+    uint64_t values[ScalarCount] = {};
+    FieldState states[ScalarCount] = {};
+    for (size_t i = 0; i < ScalarCount; ++i) {
+        const ScalarField& field = kScalars[i];
+        if (!read_optional_u64(parsed, field.name, values[i], states[i], error)) {
+            return result::err(std::move(error));
+        }
+        if (!field.nullable && states[i] == FieldState::Null) {
+            return result::err(
+                std::string(field.name) + " cannot be null; omit it to leave it unchanged."
+            );
+        }
+        if (states[i] == FieldState::Set && values[i] == 0) {
+            return result::err(
+                "Invalid " + std::string(field.name) + " (must be at least 1" +
+                (field.nullable ? ", or null for automatic" : "") + ")."
+            );
+        }
+    }
+
+    const uint64_t max_threads = values[MaxThreads];
+    const uint64_t max_tickets = values[MaxTickets];
+    const uint64_t tick_seconds = values[TickSeconds];
+    const FieldState max_threads_state = states[MaxThreads];
+
+    const bool has_max_threads = states[MaxThreads] != FieldState::Absent;
+    const bool has_max_tickets = states[MaxTickets] != FieldState::Absent;
+    const bool has_tick = states[TickSeconds] != FieldState::Absent;
+
+    // Absent leaves the existing target list alone; an empty array clears it,
+    // which is how auto-claim is turned off.
+    std::vector<ClaimTargetEntry> targets;
+    const auto targets_it = parsed.find("auto_claim_targets");
+    const bool has_targets = targets_it != parsed.end() && !targets_it->is_null();
+    if (has_targets) {
+        if (!targets_it->is_array()) {
+            return result::err("auto_claim_targets must be a JSON array.");
+        }
+        targets.reserve(targets_it->size());
+        for (const nlohmann::json& entry : *targets_it) {
+            if (!entry.is_object()) {
+                return result::err("Each target must be an object with public_key and threshold.");
+            }
+            if (!reject_unknown_fields(entry, {"public_key", "threshold"}, "claim target", error)) {
+                return result::err(std::move(error));
+            }
+            const auto key = entry.find("public_key");
+            if (key == entry.end() || key->is_null()) {
+                return result::err(
+                    "Each target needs a public_key (an empty string means the leader's funding key)."
+                );
+            }
+            if (!key->is_string()) {
+                return result::err("public_key must be a string.");
+            }
+            const std::string requested = key->get<std::string>();
+            uint64_t threshold = 0;
+            const auto raw = entry.find("threshold");
+            if (raw == entry.end() || raw->is_null()) {
+                return result::err("Each target needs a threshold.");
+            }
+            if (!parse_threshold(*raw, threshold, error)) {
+                return result::err(std::move(error));
+            }
+
+            std::string canonical;
+            if (!canonical_claim_target(reader, config.string(), requested, canonical, error)) {
+                return result::err(std::move(error));
+            }
+            // The node pays the neediest target per tick, so a key listed twice
+            // only makes which threshold applies ambiguous.
+            for (const ClaimTargetEntry& seen : targets) {
+                if (seen.public_key == canonical) {
+                    return result::err("Duplicate claim target " + canonical + ".");
+                }
+            }
+            targets.push_back(ClaimTargetEntry{std::move(canonical), threshold});
+        }
+    }
+
+    // Nothing asked for: merging an empty `pow:` would write a null over the
+    // whole section.
+    if (!has_max_threads && !has_max_tickets && !has_tick && !has_targets) {
+        return result::ok(nlohmann::json::object().dump());
+    }
+
+    const std::string max_threads_text = !has_max_threads ? std::string()
+        : (max_threads_state == FieldState::Null ? "null" : std::to_string(max_threads));
+    const std::string extra_yaml = pow_fragment(
+        max_threads_text,
+        has_max_tickets ? std::to_string(max_tickets) : std::string(),
+        has_tick ? std::to_string(tick_seconds) : std::string(),
+        has_targets ? &targets : nullptr
+    );
+
+    const StdLogosResult merged = merge_user_config(
+        config.string(), config.string(), extra_yaml, false, /*extra_insert_missing=*/true
+    );
+    if (!merged.success) {
+        return merged;
+    }
+
+    if (const std::string conflicts = merged.value.get<std::string>(); !conflicts.empty()) {
+        return result::err("Could not apply the PoW config:\n" + conflicts);
+    }
+
+    fprintf(stderr, "pow_configure: applied\n%s", extra_yaml.c_str());
+    return result::ok();
+}
+
+
+// The accounts a config records, named from the keystore beside it
+StdLogosResult LogosBlockchainModule::read_accounts(const std::string& config_path) {
+    const fs::path config = localPathFromFileUrl(config_path);
+    if (config.empty()) {
+        return result::err("Config path was not specified.");
+    }
+
+    UserConfigReader cfg;
+    std::string error;
+    if (!cfg.load(config, error)) {
+        return result::err(std::move(error));
+    }
+
+    if (!cfg.isMappingAt("/wallet/known_keys")) {
+        return result::err("wallet.known_keys in " + config.string() + " is not a block mapping.");
+    }
+
+    const auto lowered = [](std::string v) {
+        std::transform(v.begin(), v.end(), v.begin(), [](const unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        return v;
+    };
+
+    std::map<std::string, std::string> title_by_id;
+    nlohmann::json keystore_keys = nlohmann::json::array();
+    {
+        UserConfigReader keystore;
+        std::string ignored;
+        if (keystore.load(config.parent_path() / "keystore.yaml", ignored)) {
+            for (const auto& [title, key_id] : keystore.entriesAt("/public_keys")) {
+                title_by_id[lowered(key_id)] = title;
+                keystore_keys.push_back(nlohmann::json{{"key_id", key_id}, {"title", title}});
+            }
+        }
+    }
+
+    // Roles are whatever the config's own fields point at. A key can hold more
+    // than one — a generated config funds leader and SDP from the same key — so
+    // they are collected rather than resolved to a single label.
+    const std::string leader = cfg.scalarAt("/cryptarchia/leader/wallet/funding_pk");
+    const std::string sdp = cfg.scalarAt("/sdp/wallet/funding_pk");
+    const std::string voucher = cfg.scalarAt("/wallet/voucher_master_key_id");
+    const std::string blend = cfg.scalarAt("/blend/non_ephemeral_signing_key_id");
+
+    nlohmann::json accounts = nlohmann::json::array();
+    for (const auto& [key_id, public_key] : cfg.entriesAt("/wallet/known_keys")) {
+        const std::string id = lowered(key_id);
+        nlohmann::json roles = nlohmann::json::array();
+        if (!leader.empty() && public_key == lowered(leader))
+            roles.push_back("leader_funding");
+        if (!sdp.empty() && public_key == lowered(sdp))
+            roles.push_back("sdp_funding");
+        // The voucher and blend fields name a key *id*, not a public key.
+        if (!voucher.empty() && id == lowered(voucher))
+            roles.push_back("voucher_master");
+        if (!blend.empty() && id == lowered(blend))
+            roles.push_back("blend_signing");
+
+        const auto title = title_by_id.find(id);
+        accounts.push_back(nlohmann::json{
+            {"public_key", public_key},
+            {"title", title == title_by_id.end() ? std::string() : title->second},
+            {"roles", std::move(roles)},
+        });
+    }
+
+    nlohmann::json obj;
+    obj["accounts"] = std::move(accounts);
+    obj["keystore_keys"] = std::move(keystore_keys);
+    return result::ok(obj.dump());
+}
+
+// The pow section as the config holds it, in the shape pow_configure takes, so
+// a caller can show what is set and write the same object back. A generated
+// config already carries one auto-claim target, so an empty list here means
+// auto-claim is off rather than unconfigured.
+StdLogosResult LogosBlockchainModule::read_pow_config(const std::string& config_path) {
+    const fs::path config = localPathFromFileUrl(config_path);
+    if (config.empty()) {
+        return result::err("Config path was not specified.");
+    }
+
+    UserConfigReader cfg;
+    std::string error;
+    if (!cfg.load(config, error)) {
+        return result::err(std::move(error));
+    }
+
+    nlohmann::json obj;
+    const std::string max_threads = cfg.scalarAt("/pow/mining/max_threads");
+    if (max_threads.empty() || max_threads == "null") {
+        obj["max_threads"] = nullptr;
+    } else {
+        obj["max_threads"] = max_threads;
+    }
+    obj["max_tickets_per_block"] = cfg.scalarAt("/pow/mining/max_tickets_per_block");
+    obj["tick_seconds"] = cfg.scalarAt("/pow/auto_claim/tick/value");
+
+    nlohmann::json targets = nlohmann::json::array();
+    for (size_t i = 0;; ++i) {
+        const std::string base = "/pow/auto_claim/targets/" + std::to_string(i);
+        const std::string public_key = cfg.scalarAt((base + "/public_key").c_str());
+        if (public_key.empty())
+            break;
+        targets.push_back(nlohmann::json{
+            {"public_key", public_key},
+            {"threshold", cfg.scalarAt((base + "/threshold").c_str())},
+        });
+    }
+    obj["auto_claim_targets"] = std::move(targets);
+    return result::ok(obj.dump());
+}
 
 StdLogosResult LogosBlockchainModule::get_peer_id(const std::string& config_path) {
     const std::string config = localPathFromFileUrl(config_path);
