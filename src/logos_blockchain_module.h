@@ -36,6 +36,7 @@ public:
     [[nodiscard]] StdLogosResult subscribe_to_new_blocks();
     [[nodiscard]] StdLogosResult subscribe_to_processed_blocks();
     [[nodiscard]] StdLogosResult subscribe_to_lib_blocks();
+    [[nodiscard]] StdLogosResult subscribe_to_proposed_blocks();
 
     // State management
 
@@ -302,6 +303,12 @@ logos_events:
     // When the stream ends a JSON literal `null` is sent. Call `subscribe_to_lib_blocks` to keep receiving events.
     // ReSharper disable once CppFunctionIsNotImplemented
     void libBlock(const std::string& blockInfoJson);
+    // Fired per block proposal, at proposal time, before any of them has been accepted. eventJson is
+    // `{"origin":"local"|"remote","proposal":{...}}`, where the origin says whether we proposed it or a peer did.
+    // When the stream ends a JSON literal `null` is sent. Call `subscribe_to_proposed_blocks` to keep receiving
+    // events.
+    // ReSharper disable once CppFunctionIsNotImplemented
+    void proposedBlock(const std::string& eventJson);
     // clang-format on
 
 private:
@@ -311,6 +318,7 @@ private:
     std::atomic<bool> is_new_blocks_subscribed{false};
     std::atomic<bool> is_processed_blocks_subscribed{false};
     std::atomic<bool> is_lib_blocks_subscribed{false};
+    std::atomic<bool> is_proposed_blocks_subscribed{false};
 
     // Static instance for C callback (C API doesn't support user data)
     static LogosBlockchainModule* s_instance;
@@ -321,4 +329,5 @@ private:
     static void on_new_block_callback(const char* block);
     static void on_processed_block_callback(const char* event);
     static void on_lib_block_callback(const char* event);
+    static void on_proposed_block_callback(const char* event);
 };

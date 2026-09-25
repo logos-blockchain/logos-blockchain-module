@@ -527,6 +527,19 @@ void LogosBlockchainModule::on_lib_block_callback(const char* event) {
     s_instance->libBlock(std::string(event));
 }
 
+void LogosBlockchainModule::on_proposed_block_callback(const char* event) {
+    if (!s_instance) {
+        return;
+    }
+    if (!event) {
+        fprintf(stderr, "Proposed block stream ended.\n");
+        s_instance->is_proposed_blocks_subscribed = false;
+        s_instance->proposedBlock("null");
+        return;
+    }
+    s_instance->proposedBlock(std::string(event));
+}
+
 LogosBlockchainModule::LogosBlockchainModule() {
     node = nullptr;
 }
@@ -672,7 +685,10 @@ StdLogosResult LogosBlockchainModule::start(const std::string& config_path, cons
     if (StdLogosResult rc = subscribe_to_processed_blocks(); !rc.success) {
         return rc;
     }
-    return subscribe_to_lib_blocks();
+    if (StdLogosResult rc = subscribe_to_lib_blocks(); !rc.success) {
+        return rc;
+    }
+    return subscribe_to_proposed_blocks();
 }
 
 StdLogosResult LogosBlockchainModule::subscribe_to_new_blocks() {
@@ -702,6 +718,15 @@ StdLogosResult LogosBlockchainModule::subscribe_to_lib_blocks() {
     });
 }
 
+StdLogosResult LogosBlockchainModule::subscribe_to_proposed_blocks() {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+    return stream::subscribe(is_proposed_blocks_subscribed, [this] {
+        return ::subscribe_to_proposed_blocks(node, on_proposed_block_callback);
+    });
+}
+
 StdLogosResult LogosBlockchainModule::stop() {
     if (!node) {
         fprintf(stderr, "Could not execute the operation: The node is not running.\n");
@@ -719,6 +744,7 @@ StdLogosResult LogosBlockchainModule::stop() {
     is_new_blocks_subscribed = false;
     is_processed_blocks_subscribed = false;
     is_lib_blocks_subscribed = false;
+    is_proposed_blocks_subscribed = false;
     return result::ok();
 }
 

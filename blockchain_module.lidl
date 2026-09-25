@@ -47,7 +47,10 @@ module blockchain_module {
   method pow_claim(claim_address_hex: tstr) -> result
   method pow_claimable_rewards() -> result
 
+  method subscribe_to_proposed_blocks() -> result
+
   event newBlock(blockJson: tstr)
   event processedBlock(eventJson: tstr)
   event libBlock(blockInfoJson: tstr)
+  event proposedBlock(eventJson: tstr)
 }
