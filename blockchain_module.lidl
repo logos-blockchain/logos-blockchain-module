@@ -17,6 +17,7 @@ module blockchain_module {
   method add_key(user_config_path: tstr, keystore_path: tstr, key_type: tstr, key_hex: tstr, key_title: tstr) -> result
   method remove_key(user_config_path: tstr, keystore_path: tstr, key_title: tstr) -> result
   method get_peer_id(config_path: tstr) -> result
+  method get_deployment_info(config_path: tstr, deployment: tstr) -> result
   method wallet_get_balance(address_hex: tstr) -> result
   method wallet_transfer_funds(change_public_key: tstr, sender_addresses: [tstr], recipient_address: tstr, amount: tstr, optional_tip_hex: tstr) -> result
   method wallet_get_known_addresses() -> result

@@ -117,6 +117,11 @@ public:
 
     // Identity
     [[nodiscard]] static StdLogosResult get_peer_id(const std::string& config_path);
+    // Reads what a config says about its chain without starting a node.
+    [[nodiscard]] static StdLogosResult get_deployment_info(
+        const std::string& config_path,
+        const std::string& deployment
+    );
 
     // Wallet
     [[nodiscard]] StdLogosResult wallet_get_balance(const std::string& address_hex) const;
