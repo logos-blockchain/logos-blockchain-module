@@ -193,15 +193,15 @@
       },
       "locked": {
         "lastModified": 1790327689,
-        "narHash": "sha256-2JjRX7ONWgOlTS+c3g3z6m890ZFv0tYCT07FVKBGGWA=",
+        "narHash": "sha256-FPnzxeGkCsaONs0ZArtUoqu9K4g6ZORWG2dlvZdiYWs=",
         "owner": "logos-blockchain",
         "repo": "logos-blockchain",
-        "rev": "8197bbc5945e7e708ed32ddb00efbd3f2e62e948",
+        "rev": "dbccdd70eeb1c3394d67fe14a0c9979e62b5c1c0",
         "type": "github"
       },
       "original": {
         "owner": "logos-blockchain",
-        "ref": "feat/ffi/deployment-info",
+        "ref": "feat/ffi/proposal-stream",
         "repo": "logos-blockchain",
         "type": "github"
       }
