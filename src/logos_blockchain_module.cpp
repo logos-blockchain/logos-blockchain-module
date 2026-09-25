@@ -2021,3 +2021,21 @@ StdLogosResult LogosBlockchainModule::pow_claimable_rewards() const {
     }
     return result::ok(obj.dump());
 }
+
+StdLogosResult LogosBlockchainModule::pow_set_mining_settings(const std::string& settings_json) const {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+
+    OperationStatus status = ::pow_set_mining_settings(node, settings_json.c_str());
+    return result::from_operation_status(status);
+}
+
+StdLogosResult LogosBlockchainModule::pow_set_auto_claim_settings(const std::string& settings_json) const {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+
+    OperationStatus status = ::pow_set_auto_claim_settings(node, settings_json.c_str());
+    return result::from_operation_status(status);
+}

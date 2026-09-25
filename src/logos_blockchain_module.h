@@ -254,6 +254,14 @@ public:
     // Rewards this node can currently claim, as JSON:
     //   { claimable_tickets, slots_until_expiry: [ ... ] }
     [[nodiscard]] StdLogosResult pow_claimable_rewards() const;
+    // Changes the pow mining settings on the running node, without a restart.
+    // Takes the JSON shape of the `pow.mining` config section.
+    // Nothing is written to disk, so a restart returns to what the config file says.
+    [[nodiscard]] StdLogosResult pow_set_mining_settings(const std::string& settings_json) const;
+    // Changes the pow auto claim settings on the running node, without a restart.
+    // Takes the JSON shape of the `pow.auto_claim` config section.
+    // Nothing is written to disk, so a restart returns to what the config file says.
+    [[nodiscard]] StdLogosResult pow_set_auto_claim_settings(const std::string& settings_json) const;
 
     // Writes the pow section into an already-generated config; the node reads it
     // on the next start(). Every field is optional and an absent one is left as

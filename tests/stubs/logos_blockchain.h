@@ -344,6 +344,8 @@ OperationStatus pow_stop_auto_claim(LogosBlockchainNode* node);
 FfiPoWClaimResult pow_claim(LogosBlockchainNode* node, const uint8_t* claim_address);
 FfiPoWClaimableRewardsResult pow_claimable_rewards(LogosBlockchainNode* node);
 OperationStatus free_pow_claimable_rewards(PoWClaimableRewards rewards);
+OperationStatus pow_set_mining_settings(const LogosBlockchainNode* node, const char* settings_json);
+OperationStatus pow_set_auto_claim_settings(const LogosBlockchainNode* node, const char* settings_json);
 
 OperationStatus free_cstring(char* s);
 

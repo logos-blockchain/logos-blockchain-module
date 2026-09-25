@@ -567,6 +567,22 @@ LOGOS_TEST(pow_claimable_rewards_without_node_returns_error) {
     LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
 }
 
+LOGOS_TEST(pow_set_mining_settings_without_node_returns_error) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+    StdLogosResult result = module.pow_set_mining_settings("{}");
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
+}
+
+LOGOS_TEST(pow_set_auto_claim_settings_without_node_returns_error) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+    StdLogosResult result = module.pow_set_auto_claim_settings("{}");
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
+}
+
 LOGOS_TEST(get_channel_state_without_node_returns_error) {
     auto t = LogosTestContext("blockchain_module");
     LogosBlockchainModule module;
@@ -2114,6 +2130,56 @@ LOGOS_TEST(pow_claimable_rewards_returns_error_on_ffi_failure) {
     StdLogosResult result = module->pow_claimable_rewards();
     LOGOS_ASSERT_FALSE(result.success);
     LOGOS_ASSERT_TRUE(contains(result.error, "mock error"));
+    delete module;
+}
+
+LOGOS_TEST(pow_set_mining_settings_succeeds) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("pow_set_mining_settings_error").returns(0);
+
+    LOGOS_ASSERT_TRUE(module->pow_set_mining_settings("{}").success);
+    LOGOS_ASSERT(t.cFunctionCalled("pow_set_mining_settings"));
+    delete module;
+}
+
+LOGOS_TEST(pow_set_mining_settings_returns_error_on_ffi_failure) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("pow_set_mining_settings_error").returns(1);
+
+    LOGOS_ASSERT_FALSE(module->pow_set_mining_settings("{}").success);
+    delete module;
+}
+
+LOGOS_TEST(pow_set_auto_claim_settings_succeeds) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("pow_set_auto_claim_settings_error").returns(0);
+
+    LOGOS_ASSERT_TRUE(module->pow_set_auto_claim_settings("{}").success);
+    LOGOS_ASSERT(t.cFunctionCalled("pow_set_auto_claim_settings"));
+    delete module;
+}
+
+LOGOS_TEST(pow_set_auto_claim_settings_returns_error_on_ffi_failure) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("pow_set_auto_claim_settings_error").returns(1);
+
+    LOGOS_ASSERT_FALSE(module->pow_set_auto_claim_settings("{}").success);
     delete module;
 }
 
