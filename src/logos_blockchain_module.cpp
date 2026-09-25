@@ -353,7 +353,7 @@ namespace {
                 "Claim address " + out_hex + " is not in wallet.known_keys, so the node would refuse to start.";
             return false;
         }
-        greturn true;
+        return true;
     }
 
     // A u64 does not survive a round trip through QML's doubles, so thresholds
