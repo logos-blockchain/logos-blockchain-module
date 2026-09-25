@@ -2521,6 +2521,38 @@ LOGOS_TEST(get_peer_id_returns_error_on_ffi_failure) {
 }
 
 // ============================================================================
+// Deployment info (get_deployment_info)
+// ============================================================================
+
+LOGOS_TEST(get_deployment_info_returns_json_on_success) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+
+    t.mockCFunction("get_deployment_info_error").returns(0);
+    t.mockCFunction("deployment_chain_id").returns("devnet");
+    t.mockCFunction("deployment_genesis_time").returns(1700000);
+
+    StdLogosResult result = module.get_deployment_info("/tmp/config.yaml", "");
+    LOGOS_ASSERT_TRUE(result.success);
+    std::string json = result.value.get<std::string>();
+    LOGOS_ASSERT_TRUE(contains(json, "\"chain_id\":\"devnet\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"genesis_time\":1700000"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"protocol_names\""));
+    LOGOS_ASSERT(t.cFunctionCalled("get_deployment_info"));
+    LOGOS_ASSERT(t.cFunctionCalled("free_deployment_info"));
+}
+
+LOGOS_TEST(get_deployment_info_returns_error_on_ffi_failure) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+
+    t.mockCFunction("get_deployment_info_error").returns(1);
+
+    LOGOS_ASSERT_FALSE(module.get_deployment_info("/tmp/config.yaml", "").success);
+    LOGOS_ASSERT_FALSE(t.cFunctionCalled("free_deployment_info"));
+}
+
+// ============================================================================
 // PoW config (pow_configure)
 // ============================================================================
 
