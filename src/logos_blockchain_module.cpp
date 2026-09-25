@@ -1195,6 +1195,39 @@ StdLogosResult LogosBlockchainModule::get_peer_id(const std::string& config_path
     return result::ok(out);
 }
 
+StdLogosResult LogosBlockchainModule::get_deployment_info(
+    const std::string& config_path,
+    const std::string& deployment
+) {
+    const std::string config = localPathFromFileUrl(config_path);
+    const std::string deployment_path = localPathFromFileUrl(deployment);
+    const char* deployment_ptr = deployment_path.empty() ? nullptr : deployment_path.c_str();
+
+    auto [value, error] = ::get_deployment_info(config.c_str(), deployment_ptr);
+    if (!is_ok(&error)) {
+        return result::err(operation_status::take_message(error));
+    }
+
+    json obj;
+    obj["chain_id"] = value->chain_id;
+    obj["genesis_time"] = value->genesis_time;
+    obj["node_version"] = value->node_version;
+    obj["protocol_names"] = {
+        {"blend", value->protocol_names.blend},
+        {"cryptarchia", value->protocol_names.cryptarchia},
+        {"kademlia", value->protocol_names.kademlia},
+        {"identify", value->protocol_names.identify},
+        {"chain_sync", value->protocol_names.chain_sync},
+        {"mempool", value->protocol_names.mempool},
+    };
+
+    OperationStatus free_status = free_deployment_info(value);
+    if (!is_ok(&free_status)) {
+        fprintf(stderr, "Failed to free deployment info: %s\n", operation_status::take_message(free_status).c_str());
+    }
+    return result::ok(obj.dump());
+}
+
 // Wallet
 
 StdLogosResult LogosBlockchainModule::wallet_get_balance(const std::string& address_hex) const {
