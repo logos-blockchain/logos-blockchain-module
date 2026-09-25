@@ -479,6 +479,28 @@ StringResult get_block_events(LogosBlockchainNode* node, const HeaderId* header_
     return result;
 }
 
+static char s_fakeString[] = "";
+static DeploymentInfo s_fakeDeploymentInfo = {
+    s_fakeString, 0, s_fakeString,
+    {s_fakeString, s_fakeString, s_fakeString, s_fakeString, s_fakeString, s_fakeString},
+};
+
+FfiDeploymentInfoResult get_deployment_info(const char* config_path, const char* custom_deployment_path) {
+    LOGOS_CMOCK_RECORD("get_deployment_info");
+    FfiDeploymentInfoResult result;
+    const char* chain_id = LOGOS_CMOCK_RETURN_STRING("deployment_chain_id");
+    s_fakeDeploymentInfo.chain_id = chain_id ? const_cast<char*>(chain_id) : s_fakeString;
+    s_fakeDeploymentInfo.genesis_time = static_cast<uint32_t>(LOGOS_CMOCK_RETURN(int, "deployment_genesis_time"));
+    result.value = &s_fakeDeploymentInfo;
+    result.error = make_status(LOGOS_CMOCK_RETURN(int, "get_deployment_info_error"));
+    return result;
+}
+
+OperationStatus free_deployment_info(DeploymentInfo* info) {
+    LOGOS_CMOCK_RECORD("free_deployment_info");
+    return make_status(0);
+}
+
 static TimeInfo s_fakeTimeInfo = {};
 
 TimeInfoResult get_time_info(LogosBlockchainNode* node) {

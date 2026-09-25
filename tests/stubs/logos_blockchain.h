@@ -185,6 +185,22 @@ typedef struct {
     size_t n_discovered_peers;
 } NetworkInfo;
 
+typedef struct {
+    char* blend;
+    char* cryptarchia;
+    char* kademlia;
+    char* identify;
+    char* chain_sync;
+    char* mempool;
+} ProtocolNames;
+
+typedef struct {
+    char* chain_id;
+    uint32_t genesis_time;
+    char* node_version;
+    ProtocolNames protocol_names;
+} DeploymentInfo;
+
 // Result types (C++ structured bindings decompose these)
 typedef struct { LogosBlockchainNode* value; OperationStatus error; } NodeResult;
 typedef struct { uint64_t value; OperationStatus error; } BalanceResult;
@@ -205,6 +221,7 @@ typedef struct { PoWClaimableRewards value; OperationStatus error; } FfiPoWClaim
 typedef struct { char* value; OperationStatus error; } FfiGetChainIdResult;
 typedef struct { char* value; OperationStatus error; } FfiMergeUserConfigResult;
 typedef struct { NetworkInfo value; OperationStatus error; } FfiNetworkInfoResult;
+typedef struct { DeploymentInfo* value; OperationStatus error; } FfiDeploymentInfoResult;
 
 // Block event callback
 typedef void (*BlockCallback)(const char* block_json);
@@ -215,6 +232,8 @@ bool is_ok(const OperationStatus* status);
 // Lifecycle
 OperationStatus generate_user_config(GenerateConfigArgs args);
 NodeResult start_lb_node(const char* config_path, const char* deployment);
+FfiDeploymentInfoResult get_deployment_info(const char* config_path, const char* custom_deployment_path);
+OperationStatus free_deployment_info(DeploymentInfo* info);
 OperationStatus shutdown_node(LogosBlockchainNode* node);
 OperationStatus subscribe_to_new_blocks(LogosBlockchainNode* node, BlockCallback callback);
 // Streams: each event is a JSON C string; the callback is invoked exactly once
