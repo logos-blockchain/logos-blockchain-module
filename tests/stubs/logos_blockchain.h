@@ -175,6 +175,7 @@ typedef struct {
     int64_t genesis_time_unix_ms;
     uint64_t current_slot;
     uint32_t current_epoch;
+    uint64_t slots_per_epoch;
 } TimeInfo;
 
 // libp2p connectivity counters (plain values, no free call needed)

@@ -1872,6 +1872,7 @@ LOGOS_TEST(get_time_info_returns_json_on_success) {
     t.mockCFunction("time_genesis_time_unix_ms").returns(1700000);
     t.mockCFunction("time_current_slot").returns(1234);
     t.mockCFunction("time_current_epoch").returns(7);
+    t.mockCFunction("time_slots_per_epoch").returns(21600);
 
     StdLogosResult result = module->get_time_info();
     LOGOS_ASSERT_TRUE(result.success);
@@ -1880,6 +1881,7 @@ LOGOS_TEST(get_time_info_returns_json_on_success) {
     LOGOS_ASSERT_TRUE(contains(json, "\"genesis_time_unix_ms\":1700000"));
     LOGOS_ASSERT_TRUE(contains(json, "\"current_slot\":1234"));
     LOGOS_ASSERT_TRUE(contains(json, "\"current_epoch\":7"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"slots_per_epoch\":21600"));
     LOGOS_ASSERT(t.cFunctionCalled("get_time_info"));
     LOGOS_ASSERT(t.cFunctionCalled("free_time_info"));
     delete module;

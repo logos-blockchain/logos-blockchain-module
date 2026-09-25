@@ -510,6 +510,7 @@ TimeInfoResult get_time_info(LogosBlockchainNode* node) {
     s_fakeTimeInfo.genesis_time_unix_ms = static_cast<int64_t>(LOGOS_CMOCK_RETURN(int, "time_genesis_time_unix_ms"));
     s_fakeTimeInfo.current_slot = static_cast<uint64_t>(LOGOS_CMOCK_RETURN(int, "time_current_slot"));
     s_fakeTimeInfo.current_epoch = static_cast<uint32_t>(LOGOS_CMOCK_RETURN(int, "time_current_epoch"));
+    s_fakeTimeInfo.slots_per_epoch = static_cast<uint64_t>(LOGOS_CMOCK_RETURN(int, "time_slots_per_epoch"));
     result.value = &s_fakeTimeInfo;
     result.error = make_status(LOGOS_CMOCK_RETURN(int, "get_time_info_error"));
     return result;
