@@ -1925,6 +1925,7 @@ StdLogosResult LogosBlockchainModule::get_time_info() const {
     obj["genesis_time_unix_ms"] = value->genesis_time_unix_ms;
     obj["current_slot"] = static_cast<int64_t>(value->current_slot);
     obj["current_epoch"] = value->current_epoch;
+    obj["slots_per_epoch"] = static_cast<int64_t>(value->slots_per_epoch);
 
     OperationStatus free_status = free_time_info(value);
     if (!is_ok(&free_status)) {
