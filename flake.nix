@@ -1,5 +1,5 @@
 {
-  description = "Logos Blockchain Module - Qt6 Plugin";
+  description = "Logos Blockchain Module";
 
   # Pull pre-built artifacts from the self-hosted Logos Attic cache(Nix binary cache).
   nixConfig = {
@@ -8,7 +8,7 @@
   };
 
   inputs = {
-    logos-module-builder.url = "github:logos-co/logos-module-builder/0.3.1";
+    logos-module-builder.url = "github:logos-co/logos-module-builder/feat/peering";
     logos-blockchain.url = "github:logos-blockchain/logos-blockchain?ref=master";
   };
 
