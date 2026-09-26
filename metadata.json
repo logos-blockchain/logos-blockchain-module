@@ -6,6 +6,7 @@
   "author": "Logos Blockchain Team",
   "type": "core",
   "interface": "universal",
+  "transport": "qt_remote_plain",
   "codegen": {
     "impl_header": "logos_blockchain_module.h",
     "impl_class": "LogosBlockchainModule"
