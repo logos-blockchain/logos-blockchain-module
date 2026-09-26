@@ -816,7 +816,9 @@ StdLogosResult LogosBlockchainModule::merge_user_config(
     const std::string out(value);
     OperationStatus free_status = free_cstring(value);
     if (!is_ok(&free_status)) {
-        fprintf(stderr, "Failed to free merge conflicts report: %s\n", operation_status::take_message(free_status).c_str());
+        fprintf(
+            stderr, "Failed to free merge conflicts report: %s\n", operation_status::take_message(free_status).c_str()
+        );
     }
     return result::ok(out);
 }
@@ -1984,6 +1986,49 @@ StdLogosResult LogosBlockchainModule::pow_claimable_rewards() const {
         fprintf(
             stderr, "Failed to free PoW claimable rewards: %s\n", operation_status::take_message(free_status).c_str()
         );
+    }
+    return result::ok(obj.dump());
+}
+
+StdLogosResult LogosBlockchainModule::pow_status() const {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+
+    auto [value, error] = ::pow_status(node);
+    if (!is_ok(&error)) {
+        // Freeing a failed result is a no-op, so this only matters if the FFI ever
+        // starts handing back a target list alongside an error.
+        static_cast<void>(free_pow_status(value));
+        return result::err(operation_status::take_message(error));
+    }
+
+    json auto_claim;
+    auto_claim["is_armed"] = value.auto_claim.is_armed;
+    auto_claim["tick"] = {
+        {"unit", value.auto_claim.tick_unit == Slots ? "slots" : "seconds"},
+        {"value", static_cast<uint64_t>(value.auto_claim.tick)},
+    };
+    auto_claim["targets"] = json::array();
+    for (size_t i = 0; i < value.auto_claim.targets_len; ++i) {
+        const PoWClaimTargetStatus& target = value.auto_claim.targets[i];
+        json t;
+        t["public_key"] = bytes_to_hex(target.public_key, ADDRESS_BYTES);
+        // Value is u64; serialized as a string to avoid JSON number precision loss.
+        t["threshold"] = std::to_string(target.threshold);
+        // A missing balance means the node couldn't read the wallet.
+        t["balance"] = target.balance.is_some ? json(std::to_string(target.balance.value)) : json(nullptr);
+        auto_claim["targets"].push_back(std::move(t));
+    }
+
+    json obj;
+    obj["is_mining"] = value.is_mining;
+    obj["are_rewards_enabled"] = value.are_rewards_enabled;
+    obj["auto_claim"] = std::move(auto_claim);
+
+    OperationStatus free_status = free_pow_status(value);
+    if (!is_ok(&free_status)) {
+        fprintf(stderr, "Failed to free PoW status: %s\n", operation_status::take_message(free_status).c_str());
     }
     return result::ok(obj.dump());
 }

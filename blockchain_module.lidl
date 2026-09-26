@@ -45,6 +45,7 @@ module blockchain_module {
   method pow_stop_auto_claim() -> result
   method pow_claim(claim_address_hex: tstr) -> result
   method pow_claimable_rewards() -> result
+  method pow_status() -> result
 
   event newBlock(blockJson: tstr)
   event processedBlock(eventJson: tstr)

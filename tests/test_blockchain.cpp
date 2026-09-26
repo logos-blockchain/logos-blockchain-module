@@ -567,6 +567,14 @@ LOGOS_TEST(pow_claimable_rewards_without_node_returns_error) {
     LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
 }
 
+LOGOS_TEST(pow_status_without_node_returns_error) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+    StdLogosResult result = module.pow_status();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
+}
+
 LOGOS_TEST(get_channel_state_without_node_returns_error) {
     auto t = LogosTestContext("blockchain_module");
     LogosBlockchainModule module;
@@ -2110,6 +2118,91 @@ LOGOS_TEST(pow_claimable_rewards_returns_error_on_ffi_failure) {
     t.mockCFunction("pow_claimable_rewards_error").returns(1);
 
     StdLogosResult result = module->pow_claimable_rewards();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "mock error"));
+    delete module;
+}
+
+LOGOS_TEST(pow_status_returns_json) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("pow_status_error").returns(0);
+    t.mockCFunction("pow_status_is_mining").returns(1);
+    t.mockCFunction("pow_status_are_rewards_enabled").returns(1);
+    t.mockCFunction("pow_status_is_auto_claim_armed").returns(1);
+    t.mockCFunction("pow_status_tick").returns(300);
+    t.mockCFunction("pow_status_targets_count").returns(2);
+
+    StdLogosResult result = module->pow_status();
+    LOGOS_ASSERT_TRUE(result.success);
+    std::string json = result.value.get<std::string>();
+    LOGOS_ASSERT_TRUE(contains(json, "\"is_mining\":true"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"are_rewards_enabled\":true"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"is_armed\":true"));
+    // The tick unit defaults to seconds unless the mock is told otherwise.
+    LOGOS_ASSERT_TRUE(contains(json, "\"tick\":{\"unit\":\"seconds\",\"value\":300}"));
+    // Mock target i is keyed by 0xA0 + i, wants 1000 + i and holds 10 + i.
+    std::string first_key;
+    for (int i = 0; i < 32; ++i) first_key += "a0";
+    LOGOS_ASSERT_TRUE(contains(json, "\"public_key\":\"" + first_key + "\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"threshold\":\"1000\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"balance\":\"10\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"threshold\":\"1001\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"balance\":\"11\""));
+    LOGOS_ASSERT(t.cFunctionCalled("pow_status"));
+    LOGOS_ASSERT(t.cFunctionCalled("free_pow_status"));
+    delete module;
+}
+
+LOGOS_TEST(pow_status_reports_slot_ticks_and_unreadable_balances) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("pow_status_error").returns(0);
+    t.mockCFunction("pow_status_tick").returns(10);
+    t.mockCFunction("pow_status_tick_in_slots").returns(1);
+    t.mockCFunction("pow_status_targets_count").returns(1);
+    t.mockCFunction("pow_status_balance_unreadable").returns(1);
+
+    StdLogosResult result = module->pow_status();
+    LOGOS_ASSERT_TRUE(result.success);
+    std::string json = result.value.get<std::string>();
+    LOGOS_ASSERT_TRUE(contains(json, "\"tick\":{\"unit\":\"slots\",\"value\":10}"));
+    // An unreadable wallet is reported as a null balance, not as zero.
+    LOGOS_ASSERT_TRUE(contains(json, "\"balance\":null"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"is_mining\":false"));
+    delete module;
+}
+
+LOGOS_TEST(pow_status_reports_no_targets_when_auto_claim_is_unconfigured) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("pow_status_error").returns(0);
+    t.mockCFunction("pow_status_targets_count").returns(0);
+
+    StdLogosResult result = module->pow_status();
+    LOGOS_ASSERT_TRUE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.value.get<std::string>(), "\"targets\":[]"));
+    delete module;
+}
+
+LOGOS_TEST(pow_status_returns_error_on_ffi_failure) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("pow_status_error").returns(1);
+
+    StdLogosResult result = module->pow_status();
     LOGOS_ASSERT_FALSE(result.success);
     LOGOS_ASSERT_TRUE(contains(result.error, "mock error"));
     delete module;
