@@ -6,7 +6,7 @@ by `logos-lidl-gen` and committed, so consumers need cargo only.
 ```toml
 [dependencies]
 logos-blockchain-client = { git = "https://github.com/logos-blockchain/logos-blockchain-module", rev = "<sha>" }
-logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "a55fdac1a202ff2a4cf9d562a263ab41db17d99f" }  # same as the client's pin
+logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "b572e8172ca512b41c102d555f00258b859629c0" }  # same as the client's pin
 ```
 
 ```rust
