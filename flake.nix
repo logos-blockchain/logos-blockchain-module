@@ -149,9 +149,15 @@
                 --provider --protocol-version "${protocolVersion}" \
                 -o "$root/rust-client/example-module/rust-lib/src/provider_gen.rs"
 
-              for manifest in rust-client/Cargo.toml rust-client/example-module/rust-lib/Cargo.toml; do
-                if ! grep -q 'rev = "${rustSdkRev}"' "$root/$manifest"; then
-                  echo "WARNING: $manifest does not pin logos-rust-sdk rev ${rustSdkRev} (the builder's pin); update it." >&2
+              for crate in rust-client zone-sdk rust-client/example-cargo rust-client/example-module/rust-lib; do
+                if ! grep -q 'rev = "${rustSdkRev}"' "$root/$crate/Cargo.toml"; then
+                  echo "WARNING: $crate/Cargo.toml does not pin logos-rust-sdk rev ${rustSdkRev} (the builder's pin); update it." >&2
+                fi
+                # The lock records the manifest's rev query verbatim, and cargo
+                # vendors by that string: a lock taken with a short rev cannot be
+                # resolved offline once the manifest spells the full one.
+                if ! grep -q 'logos-rust-sdk?rev=${rustSdkRev}#' "$root/$crate/Cargo.lock"; then
+                  echo "WARNING: $crate/Cargo.lock does not lock logos-rust-sdk by the full rev ${rustSdkRev}; re-lock it (cargo update -p logos-rust-sdk)." >&2
                 fi
               done
               echo "done."
