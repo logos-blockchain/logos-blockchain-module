@@ -43,3 +43,50 @@ jobs:
 
       - name: Run unit tests
         run: nix build '.#checks.x86_64-linux.unit-tests' -L
+
+  generated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - uses: cachix/cachix-action@v15
+        with:
+          name: logos-co
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+
+      - name: Regenerate the LIDL contract and the Rust client
+        run: nix run .#generate 2>&1 | tee generate.log
+
+      - name: Check the generated files are committed
+        run: |
+          if ! git diff --exit-code -- blockchain_module.lidl rust-client/src/generated.rs rust-client/example-module/rust-lib/src/provider_gen.rs; then
+            echo "::error::src/logos_blockchain_module.h changed; run 'nix run .#generate' and commit the result"
+            exit 1
+          fi
+          if grep -q WARNING generate.log; then
+            echo "::error::the client's logos-rust-sdk pin differs from the module builder's; see generate.log"
+            exit 1
+          fi
+
+  rust-client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - uses: cachix/cachix-action@v15
+        with:
+          name: logos-co
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+
+      - name: Build the example module against the client
+        run: nix build '.#rust-client-example' -L

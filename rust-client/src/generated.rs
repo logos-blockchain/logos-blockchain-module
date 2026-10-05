@@ -2,7 +2,7 @@
 //
 // Typed caller + event subscribers over logos_rust_sdk's lp_* consumer.
 
-use logos_rust_sdk::{EventData, EventSubscription, LogosError, LogosModuleSDK, PluginProxy};
+use logos_rust_sdk::{EventData, EventSubscription, LogosError, LogosModuleSDK, PluginProxy, RestartPolicy, SubStatus};
 
 pub struct BlockchainModuleClient {
     proxy: PluginProxy,
@@ -28,6 +28,26 @@ impl BlockchainModuleClient {
         Ok(value)
     }
 
+    /// [`Self::start`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::start`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn start_with_timeout(&self, config_path: &str, deployment: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path), serde_json::Value::from(deployment)]);
+        let value = self.proxy.call_json_with_timeout("start", &args, timeout)?;
+        Ok(value)
+    }
+
     /// Async twin of [`Self::start`]: fire the call and receive the typed
     /// result in `callback` once it lands — the Rust analog of the C++
     /// client's `startAsync`. The callback runs from the protocol
@@ -43,9 +63,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::start_async`] with a per-call timeout — the async half of
+    /// [`Self::start_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::start_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn start_async_with_timeout<F>(&self, config_path: &str, deployment: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path), serde_json::Value::from(deployment)]);
+        self.proxy.call_json_async_with_timeout("start", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn stop(&self) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![]);
         let value = self.proxy.call_json("stop", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::stop`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::stop`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn stop_with_timeout(&self, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("stop", &args, timeout)?;
         Ok(value)
     }
 
@@ -64,9 +126,240 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::stop_async`] with a per-call timeout — the async half of
+    /// [`Self::stop_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::stop_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn stop_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("stop", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
+    pub fn subscribe_to_new_blocks(&self) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json("subscribe_to_new_blocks", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::subscribe_to_new_blocks`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::subscribe_to_new_blocks`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn subscribe_to_new_blocks_with_timeout(&self, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("subscribe_to_new_blocks", &args, timeout)?;
+        Ok(value)
+    }
+
+    /// Async twin of [`Self::subscribe_to_new_blocks`]: fire the call and receive the typed
+    /// result in `callback` once it lands — the Rust analog of the C++
+    /// client's `subscribe_to_new_blocksAsync`. The callback runs from the protocol
+    /// completion path (the module's Qt event loop), so it fires after
+    /// the current method returns, never inline.
+    pub fn subscribe_to_new_blocks_async<F>(&self, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async("subscribe_to_new_blocks", &args, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
+    /// [`Self::subscribe_to_new_blocks_async`] with a per-call timeout — the async half of
+    /// [`Self::subscribe_to_new_blocks_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::subscribe_to_new_blocks_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn subscribe_to_new_blocks_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("subscribe_to_new_blocks", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
+    pub fn subscribe_to_processed_blocks(&self) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json("subscribe_to_processed_blocks", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::subscribe_to_processed_blocks`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::subscribe_to_processed_blocks`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn subscribe_to_processed_blocks_with_timeout(&self, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("subscribe_to_processed_blocks", &args, timeout)?;
+        Ok(value)
+    }
+
+    /// Async twin of [`Self::subscribe_to_processed_blocks`]: fire the call and receive the typed
+    /// result in `callback` once it lands — the Rust analog of the C++
+    /// client's `subscribe_to_processed_blocksAsync`. The callback runs from the protocol
+    /// completion path (the module's Qt event loop), so it fires after
+    /// the current method returns, never inline.
+    pub fn subscribe_to_processed_blocks_async<F>(&self, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async("subscribe_to_processed_blocks", &args, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
+    /// [`Self::subscribe_to_processed_blocks_async`] with a per-call timeout — the async half of
+    /// [`Self::subscribe_to_processed_blocks_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::subscribe_to_processed_blocks_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn subscribe_to_processed_blocks_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("subscribe_to_processed_blocks", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
+    pub fn subscribe_to_lib_blocks(&self) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json("subscribe_to_lib_blocks", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::subscribe_to_lib_blocks`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::subscribe_to_lib_blocks`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn subscribe_to_lib_blocks_with_timeout(&self, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("subscribe_to_lib_blocks", &args, timeout)?;
+        Ok(value)
+    }
+
+    /// Async twin of [`Self::subscribe_to_lib_blocks`]: fire the call and receive the typed
+    /// result in `callback` once it lands — the Rust analog of the C++
+    /// client's `subscribe_to_lib_blocksAsync`. The callback runs from the protocol
+    /// completion path (the module's Qt event loop), so it fires after
+    /// the current method returns, never inline.
+    pub fn subscribe_to_lib_blocks_async<F>(&self, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async("subscribe_to_lib_blocks", &args, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
+    /// [`Self::subscribe_to_lib_blocks_async`] with a per-call timeout — the async half of
+    /// [`Self::subscribe_to_lib_blocks_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::subscribe_to_lib_blocks_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn subscribe_to_lib_blocks_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("subscribe_to_lib_blocks", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn does_state_exist(&self) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![]);
         let value = self.proxy.call_json("does_state_exist", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::does_state_exist`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::does_state_exist`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn does_state_exist_with_timeout(&self, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("does_state_exist", &args, timeout)?;
         Ok(value)
     }
 
@@ -85,9 +378,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::does_state_exist_async`] with a per-call timeout — the async half of
+    /// [`Self::does_state_exist_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::does_state_exist_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn does_state_exist_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("does_state_exist", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn purge_state(&self) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![]);
         let value = self.proxy.call_json("purge_state", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::purge_state`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::purge_state`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn purge_state_with_timeout(&self, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("purge_state", &args, timeout)?;
         Ok(value)
     }
 
@@ -106,9 +441,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::purge_state_async`] with a per-call timeout — the async half of
+    /// [`Self::purge_state_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::purge_state_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn purge_state_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("purge_state", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn generate_user_config(&self, json_args: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(json_args)]);
         let value = self.proxy.call_json("generate_user_config", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::generate_user_config`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::generate_user_config`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn generate_user_config_with_timeout(&self, json_args: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(json_args)]);
+        let value = self.proxy.call_json_with_timeout("generate_user_config", &args, timeout)?;
         Ok(value)
     }
 
@@ -127,9 +504,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::generate_user_config_async`] with a per-call timeout — the async half of
+    /// [`Self::generate_user_config_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::generate_user_config_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn generate_user_config_async_with_timeout<F>(&self, json_args: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(json_args)]);
+        self.proxy.call_json_async_with_timeout("generate_user_config", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn update_user_config(&self, user_config_path: &str, keystore_path: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(user_config_path), serde_json::Value::from(keystore_path)]);
         let value = self.proxy.call_json("update_user_config", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::update_user_config`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::update_user_config`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn update_user_config_with_timeout(&self, user_config_path: &str, keystore_path: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(user_config_path), serde_json::Value::from(keystore_path)]);
+        let value = self.proxy.call_json_with_timeout("update_user_config", &args, timeout)?;
         Ok(value)
     }
 
@@ -148,9 +567,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::update_user_config_async`] with a per-call timeout — the async half of
+    /// [`Self::update_user_config_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::update_user_config_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn update_user_config_async_with_timeout<F>(&self, user_config_path: &str, keystore_path: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(user_config_path), serde_json::Value::from(keystore_path)]);
+        self.proxy.call_json_async_with_timeout("update_user_config", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn migrate_user_config(&self, output_path: &str, keystore_path: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(output_path), serde_json::Value::from(keystore_path)]);
         let value = self.proxy.call_json("migrate_user_config", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::migrate_user_config`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::migrate_user_config`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn migrate_user_config_with_timeout(&self, output_path: &str, keystore_path: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(output_path), serde_json::Value::from(keystore_path)]);
+        let value = self.proxy.call_json_with_timeout("migrate_user_config", &args, timeout)?;
         Ok(value)
     }
 
@@ -169,9 +630,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::migrate_user_config_async`] with a per-call timeout — the async half of
+    /// [`Self::migrate_user_config_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::migrate_user_config_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn migrate_user_config_async_with_timeout<F>(&self, output_path: &str, keystore_path: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(output_path), serde_json::Value::from(keystore_path)]);
+        self.proxy.call_json_async_with_timeout("migrate_user_config", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn migrate_user_config_0_1_2(&self, new_config_path: &str, old_config_path: &str, keystore_path: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(new_config_path), serde_json::Value::from(old_config_path), serde_json::Value::from(keystore_path)]);
         let value = self.proxy.call_json("migrate_user_config_0_1_2", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::migrate_user_config_0_1_2`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::migrate_user_config_0_1_2`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn migrate_user_config_0_1_2_with_timeout(&self, new_config_path: &str, old_config_path: &str, keystore_path: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(new_config_path), serde_json::Value::from(old_config_path), serde_json::Value::from(keystore_path)]);
+        let value = self.proxy.call_json_with_timeout("migrate_user_config_0_1_2", &args, timeout)?;
         Ok(value)
     }
 
@@ -190,9 +693,114 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::migrate_user_config_0_1_2_async`] with a per-call timeout — the async half of
+    /// [`Self::migrate_user_config_0_1_2_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::migrate_user_config_0_1_2_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn migrate_user_config_0_1_2_async_with_timeout<F>(&self, new_config_path: &str, old_config_path: &str, keystore_path: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(new_config_path), serde_json::Value::from(old_config_path), serde_json::Value::from(keystore_path)]);
+        self.proxy.call_json_async_with_timeout("migrate_user_config_0_1_2", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
+    pub fn merge_user_config(&self, source_path: &str, destination_path: &str, extra_yaml: &str, source_insert_missing: bool, extra_insert_missing: bool) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(source_path), serde_json::Value::from(destination_path), serde_json::Value::from(extra_yaml), serde_json::Value::from(source_insert_missing), serde_json::Value::from(extra_insert_missing)]);
+        let value = self.proxy.call_json("merge_user_config", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::merge_user_config`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::merge_user_config`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn merge_user_config_with_timeout(&self, source_path: &str, destination_path: &str, extra_yaml: &str, source_insert_missing: bool, extra_insert_missing: bool, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(source_path), serde_json::Value::from(destination_path), serde_json::Value::from(extra_yaml), serde_json::Value::from(source_insert_missing), serde_json::Value::from(extra_insert_missing)]);
+        let value = self.proxy.call_json_with_timeout("merge_user_config", &args, timeout)?;
+        Ok(value)
+    }
+
+    /// Async twin of [`Self::merge_user_config`]: fire the call and receive the typed
+    /// result in `callback` once it lands — the Rust analog of the C++
+    /// client's `merge_user_configAsync`. The callback runs from the protocol
+    /// completion path (the module's Qt event loop), so it fires after
+    /// the current method returns, never inline.
+    pub fn merge_user_config_async<F>(&self, source_path: &str, destination_path: &str, extra_yaml: &str, source_insert_missing: bool, extra_insert_missing: bool, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(source_path), serde_json::Value::from(destination_path), serde_json::Value::from(extra_yaml), serde_json::Value::from(source_insert_missing), serde_json::Value::from(extra_insert_missing)]);
+        self.proxy.call_json_async("merge_user_config", &args, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
+    /// [`Self::merge_user_config_async`] with a per-call timeout — the async half of
+    /// [`Self::merge_user_config_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::merge_user_config_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn merge_user_config_async_with_timeout<F>(&self, source_path: &str, destination_path: &str, extra_yaml: &str, source_insert_missing: bool, extra_insert_missing: bool, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(source_path), serde_json::Value::from(destination_path), serde_json::Value::from(extra_yaml), serde_json::Value::from(source_insert_missing), serde_json::Value::from(extra_insert_missing)]);
+        self.proxy.call_json_async_with_timeout("merge_user_config", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn participate(&self, config_path: &str, keystore_path: &str, output_dir: &str, external_address: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path), serde_json::Value::from(keystore_path), serde_json::Value::from(output_dir), serde_json::Value::from(external_address)]);
         let value = self.proxy.call_json("participate", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::participate`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::participate`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn participate_with_timeout(&self, config_path: &str, keystore_path: &str, output_dir: &str, external_address: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path), serde_json::Value::from(keystore_path), serde_json::Value::from(output_dir), serde_json::Value::from(external_address)]);
+        let value = self.proxy.call_json_with_timeout("participate", &args, timeout)?;
         Ok(value)
     }
 
@@ -211,9 +819,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::participate_async`] with a per-call timeout — the async half of
+    /// [`Self::participate_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::participate_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn participate_async_with_timeout<F>(&self, config_path: &str, keystore_path: &str, output_dir: &str, external_address: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path), serde_json::Value::from(keystore_path), serde_json::Value::from(output_dir), serde_json::Value::from(external_address)]);
+        self.proxy.call_json_async_with_timeout("participate", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn generate_key(&self, user_config_path: &str, keystore_path: &str, key_type: &str, key_title: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(user_config_path), serde_json::Value::from(keystore_path), serde_json::Value::from(key_type), serde_json::Value::from(key_title)]);
         let value = self.proxy.call_json("generate_key", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::generate_key`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::generate_key`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn generate_key_with_timeout(&self, user_config_path: &str, keystore_path: &str, key_type: &str, key_title: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(user_config_path), serde_json::Value::from(keystore_path), serde_json::Value::from(key_type), serde_json::Value::from(key_title)]);
+        let value = self.proxy.call_json_with_timeout("generate_key", &args, timeout)?;
         Ok(value)
     }
 
@@ -232,9 +882,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::generate_key_async`] with a per-call timeout — the async half of
+    /// [`Self::generate_key_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::generate_key_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn generate_key_async_with_timeout<F>(&self, user_config_path: &str, keystore_path: &str, key_type: &str, key_title: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(user_config_path), serde_json::Value::from(keystore_path), serde_json::Value::from(key_type), serde_json::Value::from(key_title)]);
+        self.proxy.call_json_async_with_timeout("generate_key", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn add_key(&self, user_config_path: &str, keystore_path: &str, key_type: &str, key_hex: &str, key_title: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(user_config_path), serde_json::Value::from(keystore_path), serde_json::Value::from(key_type), serde_json::Value::from(key_hex), serde_json::Value::from(key_title)]);
         let value = self.proxy.call_json("add_key", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::add_key`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::add_key`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn add_key_with_timeout(&self, user_config_path: &str, keystore_path: &str, key_type: &str, key_hex: &str, key_title: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(user_config_path), serde_json::Value::from(keystore_path), serde_json::Value::from(key_type), serde_json::Value::from(key_hex), serde_json::Value::from(key_title)]);
+        let value = self.proxy.call_json_with_timeout("add_key", &args, timeout)?;
         Ok(value)
     }
 
@@ -253,9 +945,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::add_key_async`] with a per-call timeout — the async half of
+    /// [`Self::add_key_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::add_key_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn add_key_async_with_timeout<F>(&self, user_config_path: &str, keystore_path: &str, key_type: &str, key_hex: &str, key_title: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(user_config_path), serde_json::Value::from(keystore_path), serde_json::Value::from(key_type), serde_json::Value::from(key_hex), serde_json::Value::from(key_title)]);
+        self.proxy.call_json_async_with_timeout("add_key", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn remove_key(&self, user_config_path: &str, keystore_path: &str, key_title: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(user_config_path), serde_json::Value::from(keystore_path), serde_json::Value::from(key_title)]);
         let value = self.proxy.call_json("remove_key", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::remove_key`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::remove_key`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn remove_key_with_timeout(&self, user_config_path: &str, keystore_path: &str, key_title: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(user_config_path), serde_json::Value::from(keystore_path), serde_json::Value::from(key_title)]);
+        let value = self.proxy.call_json_with_timeout("remove_key", &args, timeout)?;
         Ok(value)
     }
 
@@ -274,9 +1008,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::remove_key_async`] with a per-call timeout — the async half of
+    /// [`Self::remove_key_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::remove_key_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn remove_key_async_with_timeout<F>(&self, user_config_path: &str, keystore_path: &str, key_title: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(user_config_path), serde_json::Value::from(keystore_path), serde_json::Value::from(key_title)]);
+        self.proxy.call_json_async_with_timeout("remove_key", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn get_peer_id(&self, config_path: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path)]);
         let value = self.proxy.call_json("get_peer_id", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::get_peer_id`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::get_peer_id`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn get_peer_id_with_timeout(&self, config_path: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path)]);
+        let value = self.proxy.call_json_with_timeout("get_peer_id", &args, timeout)?;
         Ok(value)
     }
 
@@ -295,9 +1071,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::get_peer_id_async`] with a per-call timeout — the async half of
+    /// [`Self::get_peer_id_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::get_peer_id_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn get_peer_id_async_with_timeout<F>(&self, config_path: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path)]);
+        self.proxy.call_json_async_with_timeout("get_peer_id", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn wallet_get_balance(&self, address_hex: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(address_hex)]);
         let value = self.proxy.call_json("wallet_get_balance", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::wallet_get_balance`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::wallet_get_balance`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn wallet_get_balance_with_timeout(&self, address_hex: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(address_hex)]);
+        let value = self.proxy.call_json_with_timeout("wallet_get_balance", &args, timeout)?;
         Ok(value)
     }
 
@@ -316,9 +1134,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::wallet_get_balance_async`] with a per-call timeout — the async half of
+    /// [`Self::wallet_get_balance_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::wallet_get_balance_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn wallet_get_balance_async_with_timeout<F>(&self, address_hex: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(address_hex)]);
+        self.proxy.call_json_async_with_timeout("wallet_get_balance", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn wallet_transfer_funds(&self, change_public_key: &str, sender_addresses: &serde_json::Value, recipient_address: &str, amount: &str, optional_tip_hex: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(change_public_key), sender_addresses.clone(), serde_json::Value::from(recipient_address), serde_json::Value::from(amount), serde_json::Value::from(optional_tip_hex)]);
         let value = self.proxy.call_json("wallet_transfer_funds", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::wallet_transfer_funds`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::wallet_transfer_funds`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn wallet_transfer_funds_with_timeout(&self, change_public_key: &str, sender_addresses: &serde_json::Value, recipient_address: &str, amount: &str, optional_tip_hex: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(change_public_key), sender_addresses.clone(), serde_json::Value::from(recipient_address), serde_json::Value::from(amount), serde_json::Value::from(optional_tip_hex)]);
+        let value = self.proxy.call_json_with_timeout("wallet_transfer_funds", &args, timeout)?;
         Ok(value)
     }
 
@@ -337,9 +1197,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::wallet_transfer_funds_async`] with a per-call timeout — the async half of
+    /// [`Self::wallet_transfer_funds_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::wallet_transfer_funds_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn wallet_transfer_funds_async_with_timeout<F>(&self, change_public_key: &str, sender_addresses: &serde_json::Value, recipient_address: &str, amount: &str, optional_tip_hex: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(change_public_key), sender_addresses.clone(), serde_json::Value::from(recipient_address), serde_json::Value::from(amount), serde_json::Value::from(optional_tip_hex)]);
+        self.proxy.call_json_async_with_timeout("wallet_transfer_funds", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn wallet_get_known_addresses(&self) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![]);
         let value = self.proxy.call_json("wallet_get_known_addresses", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::wallet_get_known_addresses`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::wallet_get_known_addresses`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn wallet_get_known_addresses_with_timeout(&self, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("wallet_get_known_addresses", &args, timeout)?;
         Ok(value)
     }
 
@@ -358,9 +1260,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::wallet_get_known_addresses_async`] with a per-call timeout — the async half of
+    /// [`Self::wallet_get_known_addresses_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::wallet_get_known_addresses_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn wallet_get_known_addresses_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("wallet_get_known_addresses", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn wallet_get_notes(&self, wallet_address_hex: &str, optional_tip_hex: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(wallet_address_hex), serde_json::Value::from(optional_tip_hex)]);
         let value = self.proxy.call_json("wallet_get_notes", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::wallet_get_notes`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::wallet_get_notes`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn wallet_get_notes_with_timeout(&self, wallet_address_hex: &str, optional_tip_hex: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(wallet_address_hex), serde_json::Value::from(optional_tip_hex)]);
+        let value = self.proxy.call_json_with_timeout("wallet_get_notes", &args, timeout)?;
         Ok(value)
     }
 
@@ -379,9 +1323,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::wallet_get_notes_async`] with a per-call timeout — the async half of
+    /// [`Self::wallet_get_notes_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::wallet_get_notes_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn wallet_get_notes_async_with_timeout<F>(&self, wallet_address_hex: &str, optional_tip_hex: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(wallet_address_hex), serde_json::Value::from(optional_tip_hex)]);
+        self.proxy.call_json_async_with_timeout("wallet_get_notes", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn wallet_get_leader_aged_notes(&self, optional_tip_hex: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(optional_tip_hex)]);
         let value = self.proxy.call_json("wallet_get_leader_aged_notes", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::wallet_get_leader_aged_notes`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::wallet_get_leader_aged_notes`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn wallet_get_leader_aged_notes_with_timeout(&self, optional_tip_hex: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(optional_tip_hex)]);
+        let value = self.proxy.call_json_with_timeout("wallet_get_leader_aged_notes", &args, timeout)?;
         Ok(value)
     }
 
@@ -400,9 +1386,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::wallet_get_leader_aged_notes_async`] with a per-call timeout — the async half of
+    /// [`Self::wallet_get_leader_aged_notes_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::wallet_get_leader_aged_notes_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn wallet_get_leader_aged_notes_async_with_timeout<F>(&self, optional_tip_hex: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(optional_tip_hex)]);
+        self.proxy.call_json_async_with_timeout("wallet_get_leader_aged_notes", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn leader_claim(&self) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![]);
         let value = self.proxy.call_json("leader_claim", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::leader_claim`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::leader_claim`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn leader_claim_with_timeout(&self, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("leader_claim", &args, timeout)?;
         Ok(value)
     }
 
@@ -421,9 +1449,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::leader_claim_async`] with a per-call timeout — the async half of
+    /// [`Self::leader_claim_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::leader_claim_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn leader_claim_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("leader_claim", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn wallet_get_claimable_vouchers(&self) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![]);
         let value = self.proxy.call_json("wallet_get_claimable_vouchers", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::wallet_get_claimable_vouchers`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::wallet_get_claimable_vouchers`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn wallet_get_claimable_vouchers_with_timeout(&self, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("wallet_get_claimable_vouchers", &args, timeout)?;
         Ok(value)
     }
 
@@ -442,9 +1512,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::wallet_get_claimable_vouchers_async`] with a per-call timeout — the async half of
+    /// [`Self::wallet_get_claimable_vouchers_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::wallet_get_claimable_vouchers_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn wallet_get_claimable_vouchers_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("wallet_get_claimable_vouchers", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn wallet_fund_tx(&self, request_json: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(request_json)]);
         let value = self.proxy.call_json("wallet_fund_tx", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::wallet_fund_tx`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::wallet_fund_tx`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn wallet_fund_tx_with_timeout(&self, request_json: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(request_json)]);
+        let value = self.proxy.call_json_with_timeout("wallet_fund_tx", &args, timeout)?;
         Ok(value)
     }
 
@@ -463,9 +1575,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::wallet_fund_tx_async`] with a per-call timeout — the async half of
+    /// [`Self::wallet_fund_tx_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::wallet_fund_tx_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn wallet_fund_tx_async_with_timeout<F>(&self, request_json: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(request_json)]);
+        self.proxy.call_json_async_with_timeout("wallet_fund_tx", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn submit_signed_transaction(&self, signed_tx_json: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(signed_tx_json)]);
         let value = self.proxy.call_json("submit_signed_transaction", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::submit_signed_transaction`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::submit_signed_transaction`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn submit_signed_transaction_with_timeout(&self, signed_tx_json: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(signed_tx_json)]);
+        let value = self.proxy.call_json_with_timeout("submit_signed_transaction", &args, timeout)?;
         Ok(value)
     }
 
@@ -484,9 +1638,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::submit_signed_transaction_async`] with a per-call timeout — the async half of
+    /// [`Self::submit_signed_transaction_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::submit_signed_transaction_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn submit_signed_transaction_async_with_timeout<F>(&self, signed_tx_json: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(signed_tx_json)]);
+        self.proxy.call_json_async_with_timeout("submit_signed_transaction", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn channel_deposit(&self, channel_id_hex: &str, funding_public_key_hex: &str, amount: &str, metadata_hex: &str, optional_tip_hex: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(channel_id_hex), serde_json::Value::from(funding_public_key_hex), serde_json::Value::from(amount), serde_json::Value::from(metadata_hex), serde_json::Value::from(optional_tip_hex)]);
         let value = self.proxy.call_json("channel_deposit", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::channel_deposit`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::channel_deposit`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn channel_deposit_with_timeout(&self, channel_id_hex: &str, funding_public_key_hex: &str, amount: &str, metadata_hex: &str, optional_tip_hex: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(channel_id_hex), serde_json::Value::from(funding_public_key_hex), serde_json::Value::from(amount), serde_json::Value::from(metadata_hex), serde_json::Value::from(optional_tip_hex)]);
+        let value = self.proxy.call_json_with_timeout("channel_deposit", &args, timeout)?;
         Ok(value)
     }
 
@@ -505,9 +1701,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::channel_deposit_async`] with a per-call timeout — the async half of
+    /// [`Self::channel_deposit_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::channel_deposit_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn channel_deposit_async_with_timeout<F>(&self, channel_id_hex: &str, funding_public_key_hex: &str, amount: &str, metadata_hex: &str, optional_tip_hex: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(channel_id_hex), serde_json::Value::from(funding_public_key_hex), serde_json::Value::from(amount), serde_json::Value::from(metadata_hex), serde_json::Value::from(optional_tip_hex)]);
+        self.proxy.call_json_async_with_timeout("channel_deposit", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn channel_deposit_with_notes(&self, channel_id_hex: &str, input_note_id_hexes: &serde_json::Value, metadata_hex: &str, change_public_key_hex: &str, funding_public_key_hexes: &serde_json::Value, max_tx_fee: &str, optional_tip_hex: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(channel_id_hex), input_note_id_hexes.clone(), serde_json::Value::from(metadata_hex), serde_json::Value::from(change_public_key_hex), funding_public_key_hexes.clone(), serde_json::Value::from(max_tx_fee), serde_json::Value::from(optional_tip_hex)]);
         let value = self.proxy.call_json("channel_deposit_with_notes", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::channel_deposit_with_notes`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::channel_deposit_with_notes`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn channel_deposit_with_notes_with_timeout(&self, channel_id_hex: &str, input_note_id_hexes: &serde_json::Value, metadata_hex: &str, change_public_key_hex: &str, funding_public_key_hexes: &serde_json::Value, max_tx_fee: &str, optional_tip_hex: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(channel_id_hex), input_note_id_hexes.clone(), serde_json::Value::from(metadata_hex), serde_json::Value::from(change_public_key_hex), funding_public_key_hexes.clone(), serde_json::Value::from(max_tx_fee), serde_json::Value::from(optional_tip_hex)]);
+        let value = self.proxy.call_json_with_timeout("channel_deposit_with_notes", &args, timeout)?;
         Ok(value)
     }
 
@@ -526,9 +1764,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::channel_deposit_with_notes_async`] with a per-call timeout — the async half of
+    /// [`Self::channel_deposit_with_notes_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::channel_deposit_with_notes_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn channel_deposit_with_notes_async_with_timeout<F>(&self, channel_id_hex: &str, input_note_id_hexes: &serde_json::Value, metadata_hex: &str, change_public_key_hex: &str, funding_public_key_hexes: &serde_json::Value, max_tx_fee: &str, optional_tip_hex: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(channel_id_hex), input_note_id_hexes.clone(), serde_json::Value::from(metadata_hex), serde_json::Value::from(change_public_key_hex), funding_public_key_hexes.clone(), serde_json::Value::from(max_tx_fee), serde_json::Value::from(optional_tip_hex)]);
+        self.proxy.call_json_async_with_timeout("channel_deposit_with_notes", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn get_channel_state(&self, channel_id_hex: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(channel_id_hex)]);
         let value = self.proxy.call_json("get_channel_state", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::get_channel_state`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::get_channel_state`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn get_channel_state_with_timeout(&self, channel_id_hex: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(channel_id_hex)]);
+        let value = self.proxy.call_json_with_timeout("get_channel_state", &args, timeout)?;
         Ok(value)
     }
 
@@ -547,9 +1827,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::get_channel_state_async`] with a per-call timeout — the async half of
+    /// [`Self::get_channel_state_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::get_channel_state_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn get_channel_state_async_with_timeout<F>(&self, channel_id_hex: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(channel_id_hex)]);
+        self.proxy.call_json_async_with_timeout("get_channel_state", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn blend_join_as_core_node(&self, locator: &str, locked_note_id_hex: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(locator), serde_json::Value::from(locked_note_id_hex)]);
         let value = self.proxy.call_json("blend_join_as_core_node", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::blend_join_as_core_node`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::blend_join_as_core_node`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn blend_join_as_core_node_with_timeout(&self, locator: &str, locked_note_id_hex: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(locator), serde_json::Value::from(locked_note_id_hex)]);
+        let value = self.proxy.call_json_with_timeout("blend_join_as_core_node", &args, timeout)?;
         Ok(value)
     }
 
@@ -568,9 +1890,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::blend_join_as_core_node_async`] with a per-call timeout — the async half of
+    /// [`Self::blend_join_as_core_node_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::blend_join_as_core_node_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn blend_join_as_core_node_async_with_timeout<F>(&self, locator: &str, locked_note_id_hex: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(locator), serde_json::Value::from(locked_note_id_hex)]);
+        self.proxy.call_json_async_with_timeout("blend_join_as_core_node", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn blend_info(&self) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![]);
         let value = self.proxy.call_json("blend_info", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::blend_info`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::blend_info`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn blend_info_with_timeout(&self, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("blend_info", &args, timeout)?;
         Ok(value)
     }
 
@@ -589,9 +1953,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::blend_info_async`] with a per-call timeout — the async half of
+    /// [`Self::blend_info_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::blend_info_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn blend_info_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("blend_info", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn get_chain_id(&self) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![]);
         let value = self.proxy.call_json("get_chain_id", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::get_chain_id`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::get_chain_id`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn get_chain_id_with_timeout(&self, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("get_chain_id", &args, timeout)?;
         Ok(value)
     }
 
@@ -610,9 +2016,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::get_chain_id_async`] with a per-call timeout — the async half of
+    /// [`Self::get_chain_id_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::get_chain_id_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn get_chain_id_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("get_chain_id", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn get_network_info(&self) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![]);
         let value = self.proxy.call_json("get_network_info", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::get_network_info`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::get_network_info`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn get_network_info_with_timeout(&self, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("get_network_info", &args, timeout)?;
         Ok(value)
     }
 
@@ -631,9 +2079,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::get_network_info_async`] with a per-call timeout — the async half of
+    /// [`Self::get_network_info_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::get_network_info_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn get_network_info_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("get_network_info", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn get_block(&self, header_id_hex: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(header_id_hex)]);
         let value = self.proxy.call_json("get_block", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::get_block`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::get_block`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn get_block_with_timeout(&self, header_id_hex: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(header_id_hex)]);
+        let value = self.proxy.call_json_with_timeout("get_block", &args, timeout)?;
         Ok(value)
     }
 
@@ -652,9 +2142,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::get_block_async`] with a per-call timeout — the async half of
+    /// [`Self::get_block_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::get_block_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn get_block_async_with_timeout<F>(&self, header_id_hex: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(header_id_hex)]);
+        self.proxy.call_json_async_with_timeout("get_block", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn get_blocks(&self, from_slot: u64, to_slot: u64) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(from_slot), serde_json::Value::from(to_slot)]);
         let value = self.proxy.call_json("get_blocks", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::get_blocks`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::get_blocks`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn get_blocks_with_timeout(&self, from_slot: u64, to_slot: u64, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(from_slot), serde_json::Value::from(to_slot)]);
+        let value = self.proxy.call_json_with_timeout("get_blocks", &args, timeout)?;
         Ok(value)
     }
 
@@ -673,9 +2205,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::get_blocks_async`] with a per-call timeout — the async half of
+    /// [`Self::get_blocks_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::get_blocks_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn get_blocks_async_with_timeout<F>(&self, from_slot: u64, to_slot: u64, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(from_slot), serde_json::Value::from(to_slot)]);
+        self.proxy.call_json_async_with_timeout("get_blocks", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn get_transaction(&self, tx_hash_hex: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(tx_hash_hex)]);
         let value = self.proxy.call_json("get_transaction", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::get_transaction`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::get_transaction`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn get_transaction_with_timeout(&self, tx_hash_hex: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(tx_hash_hex)]);
+        let value = self.proxy.call_json_with_timeout("get_transaction", &args, timeout)?;
         Ok(value)
     }
 
@@ -694,9 +2268,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::get_transaction_async`] with a per-call timeout — the async half of
+    /// [`Self::get_transaction_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::get_transaction_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn get_transaction_async_with_timeout<F>(&self, tx_hash_hex: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(tx_hash_hex)]);
+        self.proxy.call_json_async_with_timeout("get_transaction", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn get_cryptarchia_info(&self) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![]);
         let value = self.proxy.call_json("get_cryptarchia_info", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::get_cryptarchia_info`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::get_cryptarchia_info`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn get_cryptarchia_info_with_timeout(&self, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("get_cryptarchia_info", &args, timeout)?;
         Ok(value)
     }
 
@@ -715,9 +2331,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::get_cryptarchia_info_async`] with a per-call timeout — the async half of
+    /// [`Self::get_cryptarchia_info_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::get_cryptarchia_info_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn get_cryptarchia_info_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("get_cryptarchia_info", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn get_block_events(&self, header_id_hex: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(header_id_hex)]);
         let value = self.proxy.call_json("get_block_events", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::get_block_events`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::get_block_events`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn get_block_events_with_timeout(&self, header_id_hex: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(header_id_hex)]);
+        let value = self.proxy.call_json_with_timeout("get_block_events", &args, timeout)?;
         Ok(value)
     }
 
@@ -736,9 +2394,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::get_block_events_async`] with a per-call timeout — the async half of
+    /// [`Self::get_block_events_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::get_block_events_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn get_block_events_async_with_timeout<F>(&self, header_id_hex: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(header_id_hex)]);
+        self.proxy.call_json_async_with_timeout("get_block_events", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn get_time_info(&self) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![]);
         let value = self.proxy.call_json("get_time_info", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::get_time_info`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::get_time_info`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn get_time_info_with_timeout(&self, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("get_time_info", &args, timeout)?;
         Ok(value)
     }
 
@@ -757,9 +2457,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::get_time_info_async`] with a per-call timeout — the async half of
+    /// [`Self::get_time_info_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::get_time_info_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn get_time_info_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("get_time_info", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn pow_start_mining(&self) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![]);
         let value = self.proxy.call_json("pow_start_mining", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::pow_start_mining`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::pow_start_mining`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn pow_start_mining_with_timeout(&self, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("pow_start_mining", &args, timeout)?;
         Ok(value)
     }
 
@@ -778,9 +2520,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::pow_start_mining_async`] with a per-call timeout — the async half of
+    /// [`Self::pow_start_mining_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::pow_start_mining_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn pow_start_mining_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("pow_start_mining", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn pow_stop_mining(&self) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![]);
         let value = self.proxy.call_json("pow_stop_mining", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::pow_stop_mining`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::pow_stop_mining`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn pow_stop_mining_with_timeout(&self, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("pow_stop_mining", &args, timeout)?;
         Ok(value)
     }
 
@@ -799,9 +2583,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::pow_stop_mining_async`] with a per-call timeout — the async half of
+    /// [`Self::pow_stop_mining_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::pow_stop_mining_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn pow_stop_mining_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("pow_stop_mining", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn pow_start_auto_claim(&self) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![]);
         let value = self.proxy.call_json("pow_start_auto_claim", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::pow_start_auto_claim`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::pow_start_auto_claim`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn pow_start_auto_claim_with_timeout(&self, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("pow_start_auto_claim", &args, timeout)?;
         Ok(value)
     }
 
@@ -820,9 +2646,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::pow_start_auto_claim_async`] with a per-call timeout — the async half of
+    /// [`Self::pow_start_auto_claim_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::pow_start_auto_claim_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn pow_start_auto_claim_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("pow_start_auto_claim", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn pow_stop_auto_claim(&self) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![]);
         let value = self.proxy.call_json("pow_stop_auto_claim", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::pow_stop_auto_claim`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::pow_stop_auto_claim`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn pow_stop_auto_claim_with_timeout(&self, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("pow_stop_auto_claim", &args, timeout)?;
         Ok(value)
     }
 
@@ -841,9 +2709,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::pow_stop_auto_claim_async`] with a per-call timeout — the async half of
+    /// [`Self::pow_stop_auto_claim_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::pow_stop_auto_claim_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn pow_stop_auto_claim_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("pow_stop_auto_claim", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn pow_claim(&self, claim_address_hex: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(claim_address_hex)]);
         let value = self.proxy.call_json("pow_claim", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::pow_claim`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::pow_claim`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn pow_claim_with_timeout(&self, claim_address_hex: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(claim_address_hex)]);
+        let value = self.proxy.call_json_with_timeout("pow_claim", &args, timeout)?;
         Ok(value)
     }
 
@@ -862,9 +2772,51 @@ impl BlockchainModuleClient {
         });
     }
 
+    /// [`Self::pow_claim_async`] with a per-call timeout — the async half of
+    /// [`Self::pow_claim_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::pow_claim_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn pow_claim_async_with_timeout<F>(&self, claim_address_hex: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(claim_address_hex)]);
+        self.proxy.call_json_async_with_timeout("pow_claim", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn pow_claimable_rewards(&self) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![]);
         let value = self.proxy.call_json("pow_claimable_rewards", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::pow_claimable_rewards`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::pow_claimable_rewards`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn pow_claimable_rewards_with_timeout(&self, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("pow_claimable_rewards", &args, timeout)?;
         Ok(value)
     }
 
@@ -881,6 +2833,500 @@ impl BlockchainModuleClient {
         self.proxy.call_json_async("pow_claimable_rewards", &args, move |result| {
             callback(result.and_then(|value| Ok(value)));
         });
+    }
+
+    /// [`Self::pow_claimable_rewards_async`] with a per-call timeout — the async half of
+    /// [`Self::pow_claimable_rewards_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::pow_claimable_rewards_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn pow_claimable_rewards_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("pow_claimable_rewards", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
+    pub fn pow_status(&self) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json("pow_status", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::pow_status`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::pow_status`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn pow_status_with_timeout(&self, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("pow_status", &args, timeout)?;
+        Ok(value)
+    }
+
+    /// Async twin of [`Self::pow_status`]: fire the call and receive the typed
+    /// result in `callback` once it lands — the Rust analog of the C++
+    /// client's `pow_statusAsync`. The callback runs from the protocol
+    /// completion path (the module's Qt event loop), so it fires after
+    /// the current method returns, never inline.
+    pub fn pow_status_async<F>(&self, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async("pow_status", &args, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
+    /// [`Self::pow_status_async`] with a per-call timeout — the async half of
+    /// [`Self::pow_status_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::pow_status_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn pow_status_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("pow_status", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
+    pub fn pow_configure(&self, config_path: &str, config_json: &str) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path), serde_json::Value::from(config_json)]);
+        let value = self.proxy.call_json("pow_configure", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::pow_configure`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::pow_configure`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn pow_configure_with_timeout(&self, config_path: &str, config_json: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path), serde_json::Value::from(config_json)]);
+        let value = self.proxy.call_json_with_timeout("pow_configure", &args, timeout)?;
+        Ok(value)
+    }
+
+    /// Async twin of [`Self::pow_configure`]: fire the call and receive the typed
+    /// result in `callback` once it lands — the Rust analog of the C++
+    /// client's `pow_configureAsync`. The callback runs from the protocol
+    /// completion path (the module's Qt event loop), so it fires after
+    /// the current method returns, never inline.
+    pub fn pow_configure_async<F>(&self, config_path: &str, config_json: &str, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path), serde_json::Value::from(config_json)]);
+        self.proxy.call_json_async("pow_configure", &args, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
+    /// [`Self::pow_configure_async`] with a per-call timeout — the async half of
+    /// [`Self::pow_configure_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::pow_configure_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn pow_configure_async_with_timeout<F>(&self, config_path: &str, config_json: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path), serde_json::Value::from(config_json)]);
+        self.proxy.call_json_async_with_timeout("pow_configure", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
+    pub fn read_accounts(&self, config_path: &str) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path)]);
+        let value = self.proxy.call_json("read_accounts", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::read_accounts`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::read_accounts`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn read_accounts_with_timeout(&self, config_path: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path)]);
+        let value = self.proxy.call_json_with_timeout("read_accounts", &args, timeout)?;
+        Ok(value)
+    }
+
+    /// Async twin of [`Self::read_accounts`]: fire the call and receive the typed
+    /// result in `callback` once it lands — the Rust analog of the C++
+    /// client's `read_accountsAsync`. The callback runs from the protocol
+    /// completion path (the module's Qt event loop), so it fires after
+    /// the current method returns, never inline.
+    pub fn read_accounts_async<F>(&self, config_path: &str, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path)]);
+        self.proxy.call_json_async("read_accounts", &args, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
+    /// [`Self::read_accounts_async`] with a per-call timeout — the async half of
+    /// [`Self::read_accounts_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::read_accounts_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn read_accounts_async_with_timeout<F>(&self, config_path: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path)]);
+        self.proxy.call_json_async_with_timeout("read_accounts", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
+    pub fn read_pow_config(&self, config_path: &str) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path)]);
+        let value = self.proxy.call_json("read_pow_config", &args)?;
+        Ok(value)
+    }
+
+    /// [`Self::read_pow_config`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::read_pow_config`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn read_pow_config_with_timeout(&self, config_path: &str, timeout: std::time::Duration) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path)]);
+        let value = self.proxy.call_json_with_timeout("read_pow_config", &args, timeout)?;
+        Ok(value)
+    }
+
+    /// Async twin of [`Self::read_pow_config`]: fire the call and receive the typed
+    /// result in `callback` once it lands — the Rust analog of the C++
+    /// client's `read_pow_configAsync`. The callback runs from the protocol
+    /// completion path (the module's Qt event loop), so it fires after
+    /// the current method returns, never inline.
+    pub fn read_pow_config_async<F>(&self, config_path: &str, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path)]);
+        self.proxy.call_json_async("read_pow_config", &args, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
+    /// [`Self::read_pow_config_async`] with a per-call timeout — the async half of
+    /// [`Self::read_pow_config_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::read_pow_config_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn read_pow_config_async_with_timeout<F>(&self, config_path: &str, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path)]);
+        self.proxy.call_json_async_with_timeout("read_pow_config", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
+    /// The module's name, as declared in its metadata.
+    pub fn name(&self) -> Result<String, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json("name", &args)?;
+        Ok(value.as_str().unwrap_or_default().to_string())
+    }
+
+    /// [`Self::name`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::name`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn name_with_timeout(&self, timeout: std::time::Duration) -> Result<String, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("name", &args, timeout)?;
+        Ok(value.as_str().unwrap_or_default().to_string())
+    }
+
+    /// Async twin of [`Self::name`]: fire the call and receive the typed
+    /// result in `callback` once it lands — the Rust analog of the C++
+    /// client's `nameAsync`. The callback runs from the protocol
+    /// completion path (the module's Qt event loop), so it fires after
+    /// the current method returns, never inline.
+    pub fn name_async<F>(&self, callback: F)
+    where
+        F: FnOnce(Result<String, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async("name", &args, move |result| {
+            callback(result.and_then(|value| Ok(value.as_str().unwrap_or_default().to_string())));
+        });
+    }
+
+    /// [`Self::name_async`] with a per-call timeout — the async half of
+    /// [`Self::name_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::name_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn name_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<String, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("name", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value.as_str().unwrap_or_default().to_string())));
+        });
+    }
+
+    /// The module's version, as declared in its metadata.
+    pub fn version(&self) -> Result<String, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json("version", &args)?;
+        Ok(value.as_str().unwrap_or_default().to_string())
+    }
+
+    /// [`Self::version`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::version`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn version_with_timeout(&self, timeout: std::time::Duration) -> Result<String, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("version", &args, timeout)?;
+        Ok(value.as_str().unwrap_or_default().to_string())
+    }
+
+    /// Async twin of [`Self::version`]: fire the call and receive the typed
+    /// result in `callback` once it lands — the Rust analog of the C++
+    /// client's `versionAsync`. The callback runs from the protocol
+    /// completion path (the module's Qt event loop), so it fires after
+    /// the current method returns, never inline.
+    pub fn version_async<F>(&self, callback: F)
+    where
+        F: FnOnce(Result<String, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async("version", &args, move |result| {
+            callback(result.and_then(|value| Ok(value.as_str().unwrap_or_default().to_string())));
+        });
+    }
+
+    /// [`Self::version_async`] with a per-call timeout — the async half of
+    /// [`Self::version_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::version_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn version_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<String, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("version", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value.as_str().unwrap_or_default().to_string())));
+        });
+    }
+
+    /// The module's canonical LIDL interface document.
+    pub fn lidl(&self) -> Result<String, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json("lidl", &args)?;
+        Ok(value.as_str().unwrap_or_default().to_string())
+    }
+
+    /// [`Self::lidl`] with a per-call timeout: THIS call gives up after
+    /// `timeout` instead of waiting for the protocol default (20s).
+    /// The bound is threaded down to the call and stored nowhere, so
+    /// the next call through the same client — with a different
+    /// timeout, or with none — is unaffected.
+    ///
+    /// Fails with `LogosError::InvalidTimeout` if the duration cannot be
+    /// expressed on the protocol ABI (sub-millisecond, or longer than
+    /// ~24.8 days). It is refused, never clamped.
+    ///
+    /// A parallel entry point rather than a parameter on [`Self::lidl`]:
+    /// Rust has neither overloading nor default arguments, so the
+    /// parameter would break every existing call site. STOPGAP — a later
+    /// breaking release folds this back into the single entry point.
+    pub fn lidl_with_timeout(&self, timeout: std::time::Duration) -> Result<String, LogosError> {
+        let args = serde_json::Value::Array(vec![]);
+        let value = self.proxy.call_json_with_timeout("lidl", &args, timeout)?;
+        Ok(value.as_str().unwrap_or_default().to_string())
+    }
+
+    /// Async twin of [`Self::lidl`]: fire the call and receive the typed
+    /// result in `callback` once it lands — the Rust analog of the C++
+    /// client's `lidlAsync`. The callback runs from the protocol
+    /// completion path (the module's Qt event loop), so it fires after
+    /// the current method returns, never inline.
+    pub fn lidl_async<F>(&self, callback: F)
+    where
+        F: FnOnce(Result<String, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async("lidl", &args, move |result| {
+            callback(result.and_then(|value| Ok(value.as_str().unwrap_or_default().to_string())));
+        });
+    }
+
+    /// [`Self::lidl_async`] with a per-call timeout — the async half of
+    /// [`Self::lidl_with_timeout`]. The bound applies to THIS call only;
+    /// nothing is stored on the client.
+    ///
+    /// A duration the protocol ABI cannot express (sub-millisecond, or
+    /// longer than ~24.8 days) is delivered to `callback` as
+    /// `LogosError::InvalidTimeout`, synchronously and with nothing sent,
+    /// which is how every other undispatchable async call is reported.
+    ///
+    /// STOPGAP, like its sync twin: Rust cannot overload
+    /// [`Self::lidl_async`], so the bounded form needs its own name until a
+    /// breaking release makes `timeout` a parameter of the one entry point.
+    pub fn lidl_async_with_timeout<F>(&self, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(Result<String, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![]);
+        self.proxy.call_json_async_with_timeout("lidl", &args, timeout, move |result| {
+            callback(result.and_then(|value| Ok(value.as_str().unwrap_or_default().to_string())));
+        });
+    }
+
+    /// Watch this module's subscription transitions: `Armed` / `Lost` /
+    /// `Held` / `Abandoned`, with the establishment number. `Lost` followed
+    /// by `Armed` at a higher generation is the unrecoverable-gap marker.
+    ///
+    /// Per MODULE, not per event: every subscription here shares the
+    /// provider's single handle, so they are lost and restored together.
+    pub fn on_subscription_status<F>(&mut self, f: F) -> Result<(), LogosError>
+    where
+        F: Fn(SubStatus, u64) + Send + Sync + 'static,
+    {
+        self.proxy.on_subscription_status(f)
+    }
+
+    /// 0 = never armed, 1 = the first establishment, N+1 after each one.
+    pub fn subscription_generation(&mut self) -> u64 {
+        self.proxy.subscription_generation()
+    }
+
+    /// `Manual` means "do not RE-arm after a loss", never "do not arm".
+    pub fn set_restart_policy(&mut self, policy: RestartPolicy) -> Result<(), LogosError> {
+        self.proxy.set_restart_policy(policy)
+    }
+
+    /// Revive held subscriptions. Safe from inside the status callback.
+    pub fn rearm_subscriptions(&mut self) -> bool {
+        self.proxy.rearm_subscriptions()
     }
 
     /// Subscribe to the `newBlock` event. Payload arrives as a JSON array of [blockJson: tstr];
