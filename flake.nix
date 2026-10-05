@@ -9,7 +9,7 @@
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder/0.3.1";
-    logos-blockchain.url = "github:logos-blockchain/logos-blockchain?ref=0.3.0-rc.5";
+    logos-blockchain.url = "github:logos-blockchain/logos-blockchain?rev=c4c86be18c58b5b09c3650e93871c8cfb624885b";
   };
 
   outputs = inputs@{ self, logos-module-builder, ... }:

@@ -11,7 +11,7 @@ name = "logos_blockchain_zone_sdk_module_backend"
 path = "src/lib.rs"
 
 [dependencies]
-logos-blockchain-zone-sdk = { git = "https://github.com/logos-blockchain/logos-blockchain.git", rev = "2c652646d" }
+logos-blockchain-zone-sdk = { git = "https://github.com/logos-blockchain/logos-blockchain.git", rev = "c4c86be18" }
 logos-blockchain-client = { path = "../rust-client" }
 logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "a55fdac1a202ff2a4cf9d562a263ab41db17d99f" }
 
