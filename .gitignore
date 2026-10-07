@@ -24,3 +24,6 @@ doctests/outputs/*
 # clobbers the committed .md in doctests/outputs).
 doctests/preview-outputs
 doctest-local
+
+# Generated from ../flake.lock on use; a committed copy would go stale.
+mock/flake.lock

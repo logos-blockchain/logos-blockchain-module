@@ -18,7 +18,7 @@
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
       forAllSystems = fn: nixpkgs.lib.genAttrs systems fn;
 
-      module = logos-module-builder.lib.mkLogosModule {
+      moduleArgs = {
         src = ./.;
         configFile = ./metadata.json;
         flakeInputs = inputs;
@@ -47,6 +47,15 @@
           done
         '';
       };
+
+      module = logos-module-builder.lib.mkLogosModule moduleArgs;
+
+      # The same module with the running node simulated (config and key helpers
+      # stay real). See mock/README.md; apps take it through mock/flake.nix.
+      mockModule = logos-module-builder.lib.mkLogosModule (moduleArgs // {
+        tests = null;
+        preConfigure = "export LOGOS_BLOCKCHAIN_MOCK=1";
+      });
 
       # Rust client codegen inputs.
       rustSdk = logos-module-builder.inputs.logos-rust-sdk;
@@ -112,12 +121,17 @@
         };
     in
     module // {
+      mock = mockModule;
+
       packages = forAllSystems (system:
         let
           pkgs = import nixpkgs { inherit system; };
           example = (mkExampleModule { inherit pkgs system; }).packages.${system};
         in
-        module.packages.${system} // {
+        module.packages.${system}
+        // nixpkgs.lib.mapAttrs' (name: nixpkgs.lib.nameValuePair "mock-${name}") mockModule.packages.${system}
+        // {
+          mock = mockModule.packages.${system}.default;
           rust-client-example = example.default;
           rust-client-example-lgx = example.lgx;
           rust-client-example-lgx-portable = example.lgx-portable;
