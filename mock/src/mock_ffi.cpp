@@ -18,6 +18,7 @@
 extern "C" {
 #include <logos_blockchain.h>
 }
+#include "proposed_ffi.h"
 #pragma GCC visibility pop
 
 #include "mock_chain.h"
@@ -299,6 +300,36 @@ FfiGetChannelStateResult get_channel_state(const LogosBlockchainNode* node, cons
 FfiBlendInfoResult blend_info(const LogosBlockchainNode* node) {
     NODE_OR_RETURN(FfiBlendInfoResult)
     return {ownedString(n->blendInfo()), ok()};
+}
+
+// ---- proposed (logos-blockchain-module#108) ----------------------------------
+
+FfiStatusResult_____c_char blend_status(const LogosBlockchainNode* node) {
+    NODE_OR_RETURN(FfiStatusResult_____c_char)
+    return {ownedString(n->blendStatus()), ok()};
+}
+
+FfiStatusResult_____c_char blend_reachability(const LogosBlockchainNode* node) {
+    NODE_OR_RETURN(FfiStatusResult_____c_char)
+    Error err;
+    std::string out = n->blendReachability(err);
+    if (err)
+        return {nullptr, status(err)};
+    return {ownedString(out), ok()};
+}
+
+FfiStatusResult_____c_char blend_requirements(const char* custom_deployment_path) {
+    guard(__func__);
+    return {ownedString(Node::blendRequirements(custom_deployment_path)), ok()};
+}
+
+FfiStatusResult_____c_char blend_withdraw(const LogosBlockchainNode* node) {
+    NODE_OR_RETURN(FfiStatusResult_____c_char)
+    Error err;
+    std::string out = n->blendWithdraw(err);
+    if (err)
+        return {nullptr, status(err)};
+    return {ownedString(out), ok()};
 }
 
 FfiStatusResult_DeclarationId blend_join_as_core_node(const LogosBlockchainNode* node, const char* locator,

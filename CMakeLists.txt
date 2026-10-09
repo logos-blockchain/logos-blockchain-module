@@ -22,6 +22,7 @@ if(DEFINED ENV{LOGOS_BLOCKCHAIN_MOCK})
         mock/src/mock_chain.h
         mock/src/mock_chain.cpp
         mock/src/mock_ffi.cpp
+        src/proposed_ffi.h
     )
     list(APPEND BLOCKCHAIN_MODULE_LINK_LIBRARIES ${CMAKE_DL_LIBS})
 endif()
@@ -36,3 +37,7 @@ logos_module(
     LINK_LIBRARIES
         ${BLOCKCHAIN_MODULE_LINK_LIBRARIES}
 )
+
+if(DEFINED ENV{LOGOS_BLOCKCHAIN_MOCK})
+    target_compile_definitions(blockchain_module_module_plugin PRIVATE LOGOS_BLOCKCHAIN_PROPOSED_FFI)
+endif()
