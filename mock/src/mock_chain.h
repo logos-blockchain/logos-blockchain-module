@@ -57,6 +57,9 @@ Bytes32 fromPtr(const uint8_t* p);
 // True on the thread running a stream callback; the real FFI panics if called from one.
 bool inStreamCallback();
 
+// The ledger's locator check: any multiaddr without an unspecified IP or a /p2p/ part.
+bool validLocator(const std::string& locator);
+
 // Deployment rules (what a deployment file fixes) plus the mock's own knobs.
 struct Params {
     std::string chainId = "0.3.0-rc.5";
@@ -70,7 +73,14 @@ struct Params {
     uint32_t minimumNetworkSize = 2;
     uint64_t powEpochReward = 25000000;
     uint64_t powSlotWindow = 300;
-    std::vector<std::pair<Bytes32, Bytes32>> genesisProviders; // provider_id, zk_id
+    struct Provider {
+        Bytes32 providerId{};
+        Bytes32 zkId{};
+        Bytes32 noteId{};
+        std::string locator;
+    };
+    std::vector<Provider> genesisProviders;
+    std::string genesisInscription; // hex, the genesis block's first op
 
     // Mock knobs (LB_MOCK_* env vars, see README).
     uint64_t seed = 0x6c6f676f73ULL;
@@ -82,6 +92,7 @@ struct Params {
     bool blendReachable = true;
     bool assumePeers = false;
     bool panicOnReentry = true;
+    std::string publicIp = "203.0.113.7"; // what AutoNAT confirms; empty = nothing confirmed
     std::optional<double> pbpSecondsOverride;
 };
 
@@ -96,6 +107,7 @@ struct NodeConfig {
     Bytes32 blendSigningKey{}; // provider_id
     Bytes32 blendZkKey{};      // zk_id
     std::string blendListeningAddress;
+    uint16_t swarmPort = 3000;
     size_t initialPeers = 0;
     size_t ibdPeers = 0;
     double pbpSeconds = 3600;
@@ -145,6 +157,9 @@ struct Declaration {
     uint32_t created = 0;
     uint32_t active = 0;
     uint64_t nonce = 0;
+    // Set by a withdrawal landing in epoch e to e + 2: the node serves through
+    // e + 1, and the note unlocks when epoch e + 3 starts.
+    std::optional<uint32_t> withdrawAt;
 };
 
 struct PendingTx {
@@ -222,6 +237,9 @@ public:
     std::optional<std::string> blockEvents(const Bytes32& id);
     std::optional<std::string> channelState(const Bytes32& id);
     std::string blendInfo();
+    std::string blendStatus();
+    std::string blendReachability(Error& err);
+    static std::string blendRequirements(const char* deploymentPath);
 
     std::vector<Bytes32> knownAddresses();
     std::optional<uint64_t> balance(const Bytes32& pk, const Bytes32* tip, Error& err);
@@ -240,6 +258,7 @@ public:
     Bytes32 submitSigned(const std::string& signedTx, Error& err);
     Bytes32 leaderClaim(Error& err);
     Bytes32 blendJoin(const std::string& locator, const Bytes32& noteId, Error& err);
+    std::string blendWithdraw(Error& err);
 
     void powSetMining(bool on);
     void powSetAutoClaim(bool on);
@@ -264,6 +283,7 @@ private:
     size_t indexOfSlot(uint64_t slot) const;
     json headerJson(size_t index, bool withId) const;
     json backgroundTxs(uint64_t slot) const;
+    json genesisTxs() const;
     json txsAt(uint64_t slot) const;
     json blockCore(size_t index, bool withTxId) const;
     json blockProcessed(size_t index) const;
@@ -342,6 +362,13 @@ private:
     std::vector<Voucher> m_vouchers;
     std::optional<Declaration> m_declaration;
     std::set<uint32_t> m_activityAccepted;
+    struct Activity {
+        std::string status; // pending | accepted | failed
+        std::string reason; // empty | no_proof | fee_failed | post_failed | network_below_minimum
+    };
+    std::map<uint32_t, Activity> m_activity; // by the epoch the proof attests
+    std::optional<uint64_t> m_lastActivityFee;
+    int64_t m_onlineSinceMs = 0;
     std::set<uint32_t> m_onlineEpochs;
     std::map<std::string, Declaration> m_networkDeclarations;
 

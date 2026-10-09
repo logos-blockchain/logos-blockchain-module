@@ -229,24 +229,32 @@ bool envFlag(const char* name, bool fallback) {
     return std::strcmp(v, "0") != 0 && std::strcmp(v, "false") != 0;
 }
 
-// Devnet's genesis Blend providers (deployment/settings.yaml).
-const char* kDevnetProviders[][2] = {
+// Devnet's genesis Blend providers (deployment/settings.yaml):
+// provider_id, zk_id, service_note_id, locator.
+const char* kDevnetProviders[][4] = {
     {"5818cc65db81aeedc499082d5d2320d0174a3b7b04191191153da535ca753cdf",
-     "daebceddc9ef45acd72a7ca35f3d2d1c74e207eda6e274a4ca360159de8e0210"},
+     "daebceddc9ef45acd72a7ca35f3d2d1c74e207eda6e274a4ca360159de8e0210",
+     "fe3fdeadcd42a91353f638ecc9a4eb59d3131115978426516760ddc9e88e792b", "/ip4/65.108.203.235/udp/3400/quic-v1"},
     {"188245c021abfe362c07d3aa887d727dc45828d5d7d94de7843ed56c5c738aee",
-     "dc9803310f8ea8571723c6e3e568ff0d6bb81eccd28777ed99fc1a4f68cf0400"},
+     "dc9803310f8ea8571723c6e3e568ff0d6bb81eccd28777ed99fc1a4f68cf0400",
+     "c904c8277ae02ecc09f8ef6f7e7a0a27709a87b332aaa7cdca4bf1fdc579d90f", "/ip4/65.108.203.235/udp/3401/quic-v1"},
     {"7eef1970220c1ebbb7ecfde7a1402a1c1dd56f887c19b54f074f42414a14080f",
-     "8a9f02e0c130a6ee1a86ec4bd76ceef2e2c37e733f3efc4e256eec96df6d352a"},
+     "8a9f02e0c130a6ee1a86ec4bd76ceef2e2c37e733f3efc4e256eec96df6d352a",
+     "9aa2067705c463d67ca491bea1cd34e9f1d823c33da9074f6fe4523fc1ef7a0a", "/ip4/65.108.203.235/udp/3402/quic-v1"},
     {"015e73fefc8b54813f28636293edd83cd9b3384830e7dd483e58502ab399c00e",
-     "8362830159cc5f0967936720a0f5c4990339c6c4b7b5f53efac848e2a66e2007"},
+     "8362830159cc5f0967936720a0f5c4990339c6c4b7b5f53efac848e2a66e2007",
+     "f6c5e6bf9d13f81b45986ff3c70e0ef508e49793a34ed3a114122f97ea0a1f16", "/ip4/65.108.203.235/udp/50002/quic-v1"},
 };
+const char* kDevnetInscription =
+    "0a302e332e302d72632e35c85dba6a2d2ddf918544bca603c5a291c7dd1b902d6769ff4b00021506780e075c06051a";
 
 // The first genesis op is an inscription carrying [len][chain_id][genesis secs u32 LE]...
 void readGenesis(const Yaml& y, Params& p) {
     for (fy_node* tx : y.items("/cryptarchia/genesis_block/transactions")) {
         for (fy_node* op : y.items("/mantle_tx/ops", tx)) {
             const std::string inscription = y.str("/payload/inscription", op);
-            if (!inscription.empty() && p.genesisProviders.empty()) {
+            if (!inscription.empty() && p.genesisInscription.empty()) {
+                p.genesisInscription = inscription;
                 std::vector<uint8_t> b;
                 for (size_t i = 0; i + 1 < inscription.size(); i += 2)
                     b.push_back(static_cast<uint8_t>(std::stoul(inscription.substr(i, 2), nullptr, 16)));
@@ -258,10 +266,13 @@ void readGenesis(const Yaml& y, Params& p) {
                 }
             }
             if (y.str("/payload/service_type", op) == "BN") {
-                Bytes32 provider{}, zk{};
-                if (parseHex32(y.str("/payload/provider_id", op), provider) &&
-                    parseHex32(y.str("/payload/zk_id", op), zk))
-                    p.genesisProviders.emplace_back(provider, zk);
+                Params::Provider provider;
+                const auto locators = y.items("/payload/locators", op);
+                provider.locator = locators.empty() ? "" : Yaml::scalar(locators.front());
+                parseHex32(y.str("/payload/service_note_id", op), provider.noteId);
+                if (parseHex32(y.str("/payload/provider_id", op), provider.providerId) &&
+                    parseHex32(y.str("/payload/zk_id", op), provider.zkId))
+                    p.genesisProviders.push_back(provider);
             }
         }
     }
@@ -294,13 +305,17 @@ Params loadParams(const char* deploymentPath) {
         }
     }
     if (p.genesisProviders.empty()) {
-        for (auto& pair : kDevnetProviders) {
-            Bytes32 provider{}, zk{};
-            parseHex32(pair[0], provider);
-            parseHex32(pair[1], zk);
-            p.genesisProviders.emplace_back(provider, zk);
+        for (auto& row : kDevnetProviders) {
+            Params::Provider provider;
+            parseHex32(row[0], provider.providerId);
+            parseHex32(row[1], provider.zkId);
+            parseHex32(row[2], provider.noteId);
+            provider.locator = row[3];
+            p.genesisProviders.push_back(provider);
         }
     }
+    if (p.genesisInscription.empty())
+        p.genesisInscription = kDevnetInscription;
 
     if (const char* profile = env("LB_MOCK_PROFILE"); profile && std::strcmp(profile, "fast") == 0) {
         // Short epochs so a Blend declaration activates in minutes, not a day.
@@ -319,6 +334,8 @@ Params loadParams(const char* deploymentPath) {
     p.blendReachable = envFlag("LB_MOCK_BLEND_REACHABLE", p.blendReachable);
     p.assumePeers = envFlag("LB_MOCK_ASSUME_PEERS", p.assumePeers);
     p.panicOnReentry = envFlag("LB_MOCK_PANIC_ON_REENTRY", p.panicOnReentry);
+    if (const char* ip = std::getenv("LB_MOCK_PUBLIC_IP"))
+        p.publicIp = ip;
     if (env("LB_MOCK_PBP_SECONDS"))
         p.pbpSecondsOverride = envNum("LB_MOCK_PBP_SECONDS", 0);
     return p;
@@ -344,6 +361,7 @@ bool loadConfig(const char* path, NodeConfig& c, std::string& error) {
     parseHex32(y.str("/blend/non_ephemeral_signing_key_id"), c.blendSigningKey);
     parseHex32(y.str("/blend/core/zk/secret_key_kms_id"), c.blendZkKey);
     c.blendListeningAddress = y.str("/blend/core/backend/listening_address");
+    c.swarmPort = static_cast<uint16_t>(y.u64("/network/backend/swarm/port").value_or(3000));
     c.initialPeers = y.items("/network/backend/initial_peers").size();
     c.ibdPeers = y.items("/cryptarchia/network/bootstrap/ibd/peers").size();
     c.pbpSeconds = duration(y, "/cryptarchia/service/bootstrap/prolonged_bootstrap_period").value_or(3600);
@@ -467,6 +485,53 @@ Bytes32 fromPtr(const uint8_t* p) {
     Bytes32 b{};
     std::memcpy(b.data(), p, 32);
     return b;
+}
+
+bool validLocator(const std::string& locator) {
+    // protocol -> takes a value
+    static const std::map<std::string, bool> kProtocols = {
+        {"ip4", true},  {"ip6", true},   {"dns", true},   {"dns4", true},         {"dns6", true},
+        {"dnsaddr", true}, {"tcp", true}, {"udp", true},  {"quic", false},        {"quic-v1", false},
+        {"tls", false}, {"ws", false},   {"wss", false},  {"webtransport", false}, {"p2p", true}};
+    if (locator.empty() || locator.size() > 329 || locator[0] != '/')
+        return false;
+    std::vector<std::string> parts;
+    size_t start = 1;
+    while (start <= locator.size()) {
+        const size_t slash = locator.find('/', start);
+        parts.push_back(locator.substr(start, slash == std::string::npos ? std::string::npos : slash - start));
+        if (slash == std::string::npos)
+            break;
+        start = slash + 1;
+    }
+    for (size_t i = 0; i < parts.size(); ++i) {
+        auto it = kProtocols.find(parts[i]);
+        if (it == kProtocols.end() || parts[i] == "p2p")
+            return false;
+        if (!it->second)
+            continue;
+        if (++i >= parts.size() || parts[i].empty())
+            return false;
+        const std::string& v = parts[i];
+        if (it->first == "ip4") {
+            static const std::regex kIp4(R"(^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$)");
+            std::smatch m;
+            if (!std::regex_match(v, m, kIp4))
+                return false;
+            for (int k = 1; k <= 4; ++k)
+                if (std::stoi(m[k]) > 255)
+                    return false;
+            if (v == "0.0.0.0")
+                return false;
+        } else if (it->first == "ip6") {
+            if (v.find(':') == std::string::npos || v == "::" || v == "0:0:0:0:0:0:0:0")
+                return false;
+        } else if (it->first == "tcp" || it->first == "udp") {
+            if (v.size() > 5 || v.find_first_not_of("0123456789") != std::string::npos || std::stoi(v) > 65535)
+                return false;
+        }
+    }
+    return !parts.empty();
 }
 
 // ==== lifecycle ==============================================================
@@ -641,8 +706,34 @@ json Node::backgroundTxs(uint64_t slot) const {
     return txs;
 }
 
+// The genesis block's chain-identity inscription and its Blend declarations.
+json Node::genesisTxs() const {
+    json txs = json::array();
+    json ops = json::array({{{"opcode", 17},
+                             {"payload",
+                              {{"channel_id", std::string(64, '0')},
+                               {"inscription", m_params.genesisInscription},
+                               {"parent", std::string(64, '0')},
+                               {"signer", std::string(64, '0')}}}}});
+    json proofs = json::array({{{"Ed25519Sig", std::string(128, '0')}}});
+    for (const auto& p : m_params.genesisProviders) {
+        ops.push_back({{"opcode", 32},
+                       {"payload",
+                        {{"service_type", "BN"},
+                         {"locators", json::array({p.locator})},
+                         {"provider_id", hex(p.providerId)},
+                         {"zk_id", hex(p.zkId)},
+                         {"service_note_id", hex(p.noteId)}}}});
+        proofs.push_back({{"ZkAndEd25519Sigs",
+                           {{"zk_sig", {{"pi_a", std::string(64, '0')}, {"pi_b", std::string(128, '0')}, {"pi_c", std::string(64, '0')}}},
+                            {"ed25519_sig", std::string(128, '0')}}}});
+    }
+    txs.push_back({{"hash", hex(bytes(m_params.seed, 23, 0))}, {"ops", ops}, {"proofs", proofs}});
+    return txs;
+}
+
 json Node::txsAt(uint64_t slot) const {
-    json txs = backgroundTxs(slot);
+    json txs = slot == 0 ? genesisTxs() : backgroundTxs(slot);
     if (auto it = m_includedTxs.find(slot); it != m_includedTxs.end())
         for (const auto& t : it->second)
             txs.push_back(t);
@@ -757,6 +848,7 @@ void Node::tick(int64_t now, std::vector<Emitted>& out) {
         const double pbp = m_params.pbpSecondsOverride.value_or(m_cfg.pbpSeconds);
         if (m_ibdDone && static_cast<double>(now - m_pbpStartMs) >= pbp * 1000) {
             m_mode = Mode::Online;
+            m_onlineSinceMs = now;
             LBLOG("Online at height %zu", m_tip);
             setLib(m_tip > m_params.securityParam ? m_tip - m_params.securityParam : 0, out);
             m_cv.notify_all();
@@ -805,6 +897,11 @@ void Node::processBlock(size_t index, std::vector<Emitted>& out) {
                  hex(tx.hash).c_str(), static_cast<unsigned long long>(slot), why.c_str());
             for (const auto& id : tx.reserves)
                 m_reserved[id] = index + m_cfg.pendingNoteExpiryBlocks;
+            for (const auto& op : tx.ops)
+                if (op.value("opcode", -1) == 34) {
+                    const uint32_t e = op["payload"]["metadata"]["Blend"].value("epoch", 0u);
+                    m_activity[e] = {"failed", "post_failed"};
+                }
             for (const auto& op : tx.ops)
                 if (op.value("opcode", -1) == 64)
                     for (const auto& t : m_tickets)
@@ -858,7 +955,8 @@ void Node::processBlock(size_t index, std::vector<Emitted>& out) {
 bool Node::memberOf(uint32_t epoch) const {
     if (!m_declaration)
         return false;
-    return m_declaration->created + 2 <= epoch && m_declaration->active + m_params.inactivityPeriod >= epoch;
+    return m_declaration->created + 2 <= epoch && m_declaration->active + m_params.inactivityPeriod >= epoch &&
+           (!m_declaration->withdrawAt || *m_declaration->withdrawAt > epoch);
 }
 
 void Node::onEpochStart(uint32_t epoch, uint64_t slot, json& headerEvents) {
@@ -869,7 +967,12 @@ void Node::onEpochStart(uint32_t epoch, uint64_t slot, json& headerEvents) {
         if (memberOf(served)) {
             const bool online = m_onlineEpochs.count(served) > 0;
             const bool drawn = std::uniform_real_distribution<double>(0, 1)(m_rng) < m_params.blendActivityHitRate;
-            if (!online)
+            const size_t networkSize = m_params.genesisProviders.size() + 1;
+            m_activity[served] = {"failed", "no_proof"};
+            if (networkSize < m_params.minimumNetworkSize) {
+                m_activity[served] = {"failed", "network_below_minimum"};
+                LBLOG("no Blend activity for epoch %u: the network is below its minimum size", served);
+            } else if (!online)
                 LBLOG("no Blend activity proof for epoch %u: the node was not online", served);
             else if (!m_params.blendReachable || m_isolated)
                 LBLOG("no Blend activity proof for epoch %u: no Blend peers reached this node", served);
@@ -897,6 +1000,7 @@ void Node::onEpochStart(uint32_t epoch, uint64_t slot, json& headerEvents) {
                 uint64_t txFee = 0, available = 0;
                 if (!selectFunding({m_cfg.sdpFundingPk}, 0, ops, proofs, picked, txFee, available) ||
                     txFee > m_cfg.sdpMaxTxFee) {
+                    m_activity[served] = {"failed", "fee_failed"};
                     LBLOG("Blend activity for epoch %u not posted: the SDP funding key cannot pay the fee "
                          "(available=%llu)",
                          served, static_cast<unsigned long long>(available));
@@ -917,6 +1021,8 @@ void Node::onEpochStart(uint32_t epoch, uint64_t slot, json& headerEvents) {
                     for (auto& tx : m_mempool)
                         if (tx.hash == h)
                             tx.submitSlot = slot;
+                    m_activity[served] = {"pending", ""};
+                    m_lastActivityFee = txFee;
                     LBLOG("posted Blend activity for epoch %u", served);
                 }
             }
@@ -934,7 +1040,7 @@ void Node::onEpochStart(uint32_t epoch, uint64_t slot, json& headerEvents) {
         std::vector<Recipient> recipients;
         for (size_t i = 0; i < m_params.genesisProviders.size(); ++i)
             if (unit(m_params.seed, 12, paid, i) < m_params.blendActivityHitRate)
-                recipients.push_back({m_params.genesisProviders[i].second, false});
+                recipients.push_back({m_params.genesisProviders[i].zkId, false});
         if (m_declaration && m_activityAccepted.count(paid))
             recipients.push_back({m_declaration->zkId, true});
         const size_t networkSize = m_params.genesisProviders.size() + (memberOf(paid) ? 1 : 0);
@@ -961,6 +1067,22 @@ void Node::onEpochStart(uint32_t epoch, uint64_t slot, json& headerEvents) {
                 }
             }
         }
+    }
+
+    // A withdrawn declaration goes, and its note unlocks, once withdraw_at has
+    // passed: after the last served epoch's reward above.
+    if (m_declaration && m_declaration->withdrawAt && epoch > *m_declaration->withdrawAt) {
+        if (auto it = m_notes.find(m_declaration->noteId); it != m_notes.end())
+            it->second.service = false;
+        headerEvents.push_back({{"Header",
+                                 {{"SdpNoteUnlocked",
+                                   {{"service_type", "BN"},
+                                    {"declaration_id", hex(m_declaration->id)},
+                                    {"note_id", hex(m_declaration->noteId)}}}}}});
+        LBLOG("Blend declaration %s removed in epoch %u; its stake note is unlocked",
+             hex(m_declaration->id).c_str(), epoch);
+        m_declaration.reset();
+        m_cfg.sdpDeclarationId.reset();
     }
 }
 
@@ -1086,6 +1208,7 @@ bool Node::applyTxUnchecked(const PendingTx& tx, uint64_t slot, json& events, st
     std::set<Bytes32> spent;
     std::vector<Note> channelNotes;
     std::optional<Declaration> declared;
+    std::optional<uint32_t> withdrawAt;
     std::optional<std::pair<uint64_t, uint32_t>> activity; // nonce, epoch
     std::vector<Bytes32> claimedVouchers, retiredTickets;
     std::map<std::string, json> channels = m_channels;
@@ -1184,8 +1307,8 @@ bool Node::applyTxUnchecked(const PendingTx& tx, uint64_t slot, json& events, st
                       std::to_string(m_params.minStake);
                 return false;
             }
-            for (const auto& [prov, z] : m_params.genesisProviders)
-                if (prov == provider || z == zk) {
+            for (const auto& g : m_params.genesisProviders)
+                if (g.providerId == provider || g.zkId == zk) {
                     why = "duplicate provider_id or zk_id";
                     return false;
                 }
@@ -1203,6 +1326,20 @@ bool Node::applyTxUnchecked(const PendingTx& tx, uint64_t slot, json& events, st
             d.created = epochOf(slot);
             d.active = d.created + 2;
             declared = d;
+            break;
+        }
+        case 33: {
+            Bytes32 id{};
+            parseHex32(p.value("declaration_id", std::string()), id);
+            if (!m_declaration || m_declaration->id != id) {
+                why = "unknown declaration";
+                return false;
+            }
+            if (m_declaration->withdrawAt) {
+                why = "declaration already withdrawn";
+                return false;
+            }
+            withdrawAt = epochOf(slot) + 2;
             break;
         }
         case 34: {
@@ -1337,9 +1474,15 @@ bool Node::applyTxUnchecked(const PendingTx& tx, uint64_t slot, json& events, st
                  hex(declared->id).c_str(), declared->created, declared->created + 2);
         }
     }
+    if (withdrawAt && m_declaration) {
+        m_declaration->withdrawAt = withdrawAt;
+        LBLOG("Blend declaration %s withdrawn in epoch %u: serves through epoch %u, stake unlocks in epoch %u",
+             hex(m_declaration->id).c_str(), epochOf(slot), *withdrawAt - 1, *withdrawAt + 1);
+    }
     if (activity && m_declaration) {
         m_declaration->active = std::max(m_declaration->active, epochOf(slot));
         m_activityAccepted.insert(activity->second);
+        m_activity[activity->second] = {"accepted", ""};
     }
     for (const auto& n : claimedVouchers)
         for (auto& v : m_vouchers)
@@ -1443,11 +1586,112 @@ std::string Node::blendInfo() {
     if (m_mode == Mode::Online && memberOf(epoch) && networkSize >= m_params.minimumNetworkSize) {
         json peers = json::array();
         for (size_t i = 0; i < m_params.genesisProviders.size() && i < 4; ++i)
-            peers.push_back(json::array({peerId(m_params.genesisProviders[i].first),
+            peers.push_back(json::array({peerId(m_params.genesisProviders[i].providerId),
                                          m_params.blendReachable || unit(m_params.seed, 21, epoch, i) < 0.5}));
         info["core_info"] = {{"current_epoch_peers", peers}, {"old_epoch_peers", nullptr}};
     }
     return info.dump();
+}
+
+std::string Node::blendStatus() {
+    std::lock_guard lock(m_mutex);
+    const uint32_t epoch = epochOf(m_chain[m_tip]);
+    const size_t networkSize = m_params.genesisProviders.size() + (memberOf(epoch) ? 1 : 0);
+    bool pending = false, withdrawing = false;
+    for (const auto& tx : m_mempool)
+        for (const auto& op : tx.ops) {
+            if (op.value("opcode", -1) == 32 &&
+                op["payload"].value("provider_id", std::string()) == hex(m_cfg.blendSigningKey))
+                pending = true;
+            if (op.value("opcode", -1) == 33 && m_declaration &&
+                op["payload"].value("declaration_id", std::string()) == hex(m_declaration->id))
+                withdrawing = true;
+        }
+
+    std::string state = pending ? "pending" : "not_declared";
+    json declaration = nullptr, activity = nullptr;
+    if (m_declaration) {
+        const Declaration& d = *m_declaration;
+        state = d.withdrawAt || withdrawing ? "withdrawn"
+              : epoch < d.created + 2       ? "activating"
+              : memberOf(epoch)             ? "active"
+                                            : "inactive";
+        declaration = {{"id", hex(d.id)},
+                       {"provider_id", hex(d.providerId)},
+                       {"zk_id", hex(d.zkId)},
+                       {"locked_note_id", hex(d.noteId)},
+                       {"locators", json::array({d.locator})},
+                       {"created_epoch", d.created},
+                       {"active_from_epoch", d.created + 2},
+                       {"withdraw_at", d.withdrawAt ? json(*d.withdrawAt) : json(nullptr)}};
+        // The proof posted during this epoch attests the previous one.
+        json thisEpoch = "pending", reason = nullptr;
+        if (epoch > 0)
+            if (auto it = m_activity.find(epoch - 1); it != m_activity.end()) {
+                thisEpoch = it->second.status;
+                if (!it->second.reason.empty())
+                    reason = it->second.reason;
+            }
+        json lastActive = nullptr;
+        if (!m_activityAccepted.empty())
+            lastActive = *m_activityAccepted.rbegin();
+        uint64_t tokens = 0;
+        if (m_mode == Mode::Online && memberOf(epoch) && m_params.blendReachable && !m_isolated) {
+            const uint64_t into = m_chain[m_tip] - static_cast<uint64_t>(epoch) * m_params.epochSlots;
+            tokens = into / 3 + key(m_params.seed, 24, epoch) % 3;
+        }
+        activity = {{"this_epoch", thisEpoch},
+                    {"reason", reason},
+                    {"tokens_collected", tokens},
+                    {"last_active_epoch", lastActive},
+                    {"last_fee", m_lastActivityFee ? json(std::to_string(*m_lastActivityFee)) : json(nullptr)}};
+    }
+    const bool core = m_mode == Mode::Online && state == "active" && networkSize >= m_params.minimumNetworkSize;
+    size_t healthy = 0, total = 0;
+    if (core) {
+        total = std::min<size_t>(4, m_params.genesisProviders.size());
+        healthy = m_params.blendReachable ? total : total / 2;
+    }
+    json out = {{"core_mode", core},
+                {"state", state},
+                {"declaration", declaration},
+                {"current_epoch", epoch},
+                {"network_size", networkSize},
+                {"activity", activity},
+                {"session_peers", {{"total", total}, {"healthy", healthy}}}};
+    return out.dump();
+}
+
+std::string Node::blendReachability(Error& err) {
+    std::lock_guard lock(m_mutex);
+    if (m_mode != Mode::Online) {
+        err = {kServiceError, "Blend reachability is unknown until the node is Online."};
+        return {};
+    }
+    // The dial-back takes a moment after the node comes Online.
+    const int64_t now = nowMs();
+    const bool checked = now - m_onlineSinceMs > 20000;
+    json addresses = json::array();
+    if (!m_isolated && !m_params.publicIp.empty())
+        addresses.push_back("/ip4/" + m_params.publicIp + "/udp/" + std::to_string(m_cfg.swarmPort) + "/quic-v1");
+    json out = {{"blend_address", m_cfg.blendListeningAddress},
+                {"reachable", checked ? json(m_params.blendReachable && !m_isolated) : json(nullptr)},
+                {"checked_at", checked ? json((m_onlineSinceMs + 20000) / 1000) : json(nullptr)},
+                {"confirmed_external_addresses", addresses}};
+    return out.dump();
+}
+
+std::string Node::blendRequirements(const char* deploymentPath) {
+    const Params p = loadParams(deploymentPath);
+    json out = {{"min_stake", std::to_string(p.minStake)},
+                {"activation_delay_epochs", 2},
+                {"inactivity_period", p.inactivityPeriod},
+                {"minimum_network_size", p.minimumNetworkSize},
+                // A withdrawal landing in epoch e unlocks the note when e + 3 starts.
+                {"unlock_delay_epochs", 3},
+                {"epoch_slots", p.epochSlots},
+                {"retention_period", nullptr}};
+    return out.dump();
 }
 
 std::vector<Bytes32> Node::knownAddresses() {
@@ -1809,9 +2053,7 @@ Bytes32 Node::leaderClaim(Error& err) {
 
 Bytes32 Node::blendJoin(const std::string& locator, const Bytes32& noteId, Error& err) {
     std::lock_guard lock(m_mutex);
-    static const std::regex kLocator(R"(^/(ip4|ip6|dns|dns4|dns6)/([^/]+)/udp/(\d{1,5})/quic-v1$)");
-    std::smatch m;
-    if (locator.size() > 329 || !std::regex_match(locator, m, kLocator) || m[2] == "0.0.0.0" || m[2] == "::") {
+    if (!validLocator(locator)) {
         err = {kValidationError, "`locator` is not a valid locator."};
         return {};
     }
@@ -1866,6 +2108,62 @@ Bytes32 Node::blendJoin(const std::string& locator, const Bytes32& noteId, Error
         bytes(fold(m_cfg.blendSigningKey) ^ fold(m_cfg.blendZkKey), 19, std::hash<std::string>{}(locators));
     m_cfg.sdpDeclarationId = id;
     return id;
+}
+
+std::string Node::blendWithdraw(Error& err) {
+    std::lock_guard lock(m_mutex);
+    if (m_mode != Mode::Online) {
+        err = {kServiceError, "Can't withdraw until the node is Online."};
+        return {};
+    }
+    if (!m_declaration) {
+        err = {kServiceError, "This node has no Blend declaration to withdraw."};
+        return {};
+    }
+    if (m_declaration->withdrawAt) {
+        err = {kServiceError, "This node's Blend declaration is already withdrawn."};
+        return {};
+    }
+    for (const auto& tx : m_mempool)
+        for (const auto& op : tx.ops)
+            if (op.value("opcode", -1) == 33 &&
+                op["payload"].value("declaration_id", std::string()) == hex(m_declaration->id)) {
+                err = {kServiceError, "A withdrawal is already waiting for a block."};
+                return {};
+            }
+    json ops = json::array(
+        {{{"opcode", 33},
+          {"payload",
+           {{"declaration_id", hex(m_declaration->id)},
+            {"locked_note_id", hex(m_declaration->noteId)},
+            {"nonce", m_declaration->nonce + 1}}}}});
+    const uint64_t s = m_rng();
+    json proofs = json::array({zkSig(s)});
+    std::vector<Note> picked;
+    uint64_t txFee = 0, available = 0;
+    if (!selectFunding({m_cfg.sdpFundingPk}, 0, ops, proofs, picked, txFee, available) ||
+        txFee > m_cfg.sdpMaxTxFee) {
+        LBLOG("blend withdraw: the SDP funding key cannot pay the fee (available=%llu)",
+             static_cast<unsigned long long>(available));
+        err = {kRelayError, "Failed to withdraw: the SDP funding key cannot pay the fee."};
+        return {};
+    }
+    uint64_t in = 0;
+    std::set<Bytes32> reserves;
+    for (auto& n : picked) {
+        in += n.value;
+        reserves.insert(n.id);
+    }
+    std::vector<std::pair<uint64_t, Bytes32>> outs;
+    if (in > txFee)
+        outs.push_back({in - txFee, m_cfg.sdpFundingPk});
+    ops.push_back(transferOp(picked, outs));
+    proofs.push_back(zkSig(s + 7));
+    m_declaration->nonce += 1;
+    const Bytes32 hash = enqueue(ops, proofs, reserves);
+    // If it lands this epoch; a later block moves it on accordingly.
+    const uint32_t epoch = epochOf(m_chain[m_tip]);
+    return json({{"tx_hash", hex(hash)}, {"unlocks_at_epoch", epoch + 3}}).dump();
 }
 
 // ==== PoW ====================================================================
@@ -2032,6 +2330,8 @@ void Node::loadState() {
                                     d["created"].get<uint32_t>(),
                                     d["active"].get<uint32_t>(),
                                     d["nonce"].get<uint64_t>()};
+        if (d.contains("withdraw_at") && d["withdraw_at"].is_number())
+            m_declaration->withdrawAt = d["withdraw_at"].get<uint32_t>();
     }
     for (const auto& e : s.value("activity_accepted", json::array()))
         m_activityAccepted.insert(e.get<uint32_t>());
@@ -2072,6 +2372,7 @@ void Node::loadState() {
                         now - s.value("last_online_ms", int64_t{0}) < static_cast<int64_t>(m_cfg.offlineGraceSeconds * 1000);
     if (recent && !m_cfg.forceBootstrap && m_lib > 0) {
         m_mode = Mode::Online;
+        m_onlineSinceMs = now;
         m_ibdDone = true;
     }
 }
@@ -2108,7 +2409,9 @@ void Node::saveState() {
                             {"locator", m_declaration->locator},
                             {"created", m_declaration->created},
                             {"active", m_declaration->active},
-                            {"nonce", m_declaration->nonce}};
+                            {"nonce", m_declaration->nonce},
+                            {"withdraw_at", m_declaration->withdrawAt ? json(*m_declaration->withdrawAt)
+                                                                      : json(nullptr)}};
     if (m_cfg.sdpDeclarationId)
         s["sdp_declaration_id"] = hex(*m_cfg.sdpDeclarationId);
     s["activity_accepted"] = m_activityAccepted;
