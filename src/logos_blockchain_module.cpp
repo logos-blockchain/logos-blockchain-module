@@ -1,5 +1,9 @@
 #include "logos_blockchain_module.h"
 
+#ifdef LOGOS_BLOCKCHAIN_PROPOSED_FFI
+#include "proposed_ffi.h"
+#endif
+
 #include "user_config_reader.h"
 
 #include <algorithm>
@@ -1133,6 +1137,49 @@ StdLogosResult LogosBlockchainModule::read_accounts(const std::string& config_pa
     return result::ok(obj.dump());
 }
 
+namespace {
+    // The UDP port of a multiaddr like /ip4/0.0.0.0/udp/3400/quic-v1, or -1.
+    long udp_port_of(const std::string& multiaddr) {
+        const std::string marker = "/udp/";
+        const size_t at = multiaddr.find(marker);
+        if (at == std::string::npos)
+            return -1;
+        const size_t start = at + marker.size();
+        const size_t end = multiaddr.find('/', start);
+        const std::string digits = multiaddr.substr(start, end == std::string::npos ? std::string::npos : end - start);
+        if (digits.empty() || digits.size() > 5 || digits.find_first_not_of("0123456789") != std::string::npos)
+            return -1;
+        return std::stol(digits);
+    }
+} // namespace
+
+StdLogosResult LogosBlockchainModule::read_blend_config(const std::string& config_path) {
+    const fs::path config = localPathFromFileUrl(config_path);
+    if (config.empty()) {
+        return result::err("Config path was not specified.");
+    }
+
+    UserConfigReader cfg;
+    std::string error;
+    if (!cfg.load(config, error)) {
+        return result::err(std::move(error));
+    }
+
+    const std::string address = cfg.scalarAt("/blend/core/backend/listening_address");
+    const long port = udp_port_of(address);
+
+    nlohmann::json obj;
+    obj["listening_address"] = address;
+    obj["port"] = port >= 0 ? nlohmann::json(port) : nlohmann::json(nullptr);
+    obj["provider_id"] = cfg.scalarAt("/blend/non_ephemeral_signing_key_id");
+    obj["zk_id"] = cfg.scalarAt("/blend/core/zk/secret_key_kms_id");
+    obj["sdp_funding_pk"] = cfg.scalarAt("/sdp/wallet/funding_pk");
+    // Only a static NAT config has one; the node's own locator resolution
+    // (participate) puts its host in place of the listening address's 0.0.0.0.
+    obj["external_address"] = cfg.scalarAt("/network/backend/swarm/nat/external_address");
+    return result::ok(obj.dump());
+}
+
 // The pow section as the config holds it, in the shape pow_configure takes, so
 // a caller can show what is set and write the same object back. A generated
 // config already carries one auto-claim target, so an empty list here means
@@ -1707,6 +1754,74 @@ StdLogosResult LogosBlockchainModule::blend_info() const {
         fprintf(stderr, "Failed to free blend info string: %s\n", operation_status::take_message(free_status).c_str());
     }
     return result::ok(std::move(out));
+}
+
+// ---- Proposed (logos-blockchain-module#108) ----
+
+#ifdef LOGOS_BLOCKCHAIN_PROPOSED_FFI
+namespace {
+    StdLogosResult take_string(FfiStatusResult_____c_char r, const char* what) {
+        if (!is_ok(&r.error)) {
+            return result::err(operation_status::take_message(r.error));
+        }
+        std::string out(r.value);
+        OperationStatus free_status = free_cstring(r.value);
+        if (!is_ok(&free_status)) {
+            fprintf(stderr, "Failed to free %s string: %s\n", what, operation_status::take_message(free_status).c_str());
+        }
+        return result::ok(std::move(out));
+    }
+} // namespace
+#else
+namespace {
+    StdLogosResult not_available(const char* call) {
+        return result::err(std::string(call) +
+                           " is not available yet: the node does not provide it (logos-blockchain-module#108).");
+    }
+} // namespace
+#endif
+
+StdLogosResult LogosBlockchainModule::blend_status() const {
+#ifdef LOGOS_BLOCKCHAIN_PROPOSED_FFI
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+    return take_string(::blend_status(node), "blend status");
+#else
+    return not_available("blend_status");
+#endif
+}
+
+StdLogosResult LogosBlockchainModule::blend_reachability() const {
+#ifdef LOGOS_BLOCKCHAIN_PROPOSED_FFI
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+    return take_string(::blend_reachability(node), "blend reachability");
+#else
+    return not_available("blend_reachability");
+#endif
+}
+
+StdLogosResult LogosBlockchainModule::blend_withdraw() const {
+#ifdef LOGOS_BLOCKCHAIN_PROPOSED_FFI
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+    return take_string(::blend_withdraw(node), "blend withdraw");
+#else
+    return not_available("blend_withdraw");
+#endif
+}
+
+StdLogosResult LogosBlockchainModule::blend_requirements(const std::string& custom_deployment_path) {
+#ifdef LOGOS_BLOCKCHAIN_PROPOSED_FFI
+    const std::string path = localPathFromFileUrl(custom_deployment_path);
+    return take_string(::blend_requirements(path.empty() ? nullptr : path.c_str()), "blend requirements");
+#else
+    (void)custom_deployment_path;
+    return not_available("blend_requirements");
+#endif
 }
 
 // Chain

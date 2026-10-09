@@ -8,8 +8,35 @@ the real library, so the configs and keystores you get are genuine.
 
 Use it to build and test UIs against flows a real network makes slow or
 impossible to reproduce. These include bootstrapping, mining, claiming,
-transfers and joining Blend as a core node, plus their failure modes. It only
-implements what the C API on master offers, and does not add anything to it.
+transfers and joining Blend as a core node, plus their failure modes.
+
+## Proposed calls (#108)
+
+`blend_status()`, `blend_reachability()`, `blend_requirements(path)` and
+`blend_withdraw()` are on the module but not in the node yet: `src/proposed_ffi.h` declares the C
+functions they need. Only this variant defines `LOGOS_BLOCKCHAIN_PROPOSED_FFI`
+and implements them, so in a normal build each call fails with "not available
+yet". The shapes are documented in `src/logos_blockchain_module.h`. When the
+node ships a real binding, delete its declaration from `proposed_ffi.h` and the
+`#ifdef` around its module method.
+
+- **`blend_status`.** The state is `pending` while the declaration is in the
+  mempool, `activating` until E+2, then `active`. It becomes `inactive` after
+  missed activity, and `withdrawn` from the moment a withdrawal is submitted
+  until the declaration is removed. `activity` describes the proof posted this epoch (which
+  attests the previous epoch) and the reason it failed, if it did.
+- **`blend_reachability`.** It errors until the node is Online. `reachable`
+  stays `null` for about 20 s after Online, then follows
+  `LB_MOCK_BLEND_REACHABLE`. `confirmed_external_addresses` holds
+  `LB_MOCK_PUBLIC_IP` on the swarm port.
+- **`blend_requirements`.** It reads the deployment; no node is needed.
+  `unlock_delay_epochs` is 3 and `epoch_slots` comes from the deployment.
+- **`blend_withdraw`.** Submits an SDP withdrawal (opcode 33) paid from the
+  SDP funding key, as the ledger does: landing in epoch W it sets
+  `withdraw_at` to W+2, the node keeps serving and is rewarded through W+1,
+  and when W+3 starts the declaration is removed and the stake note unlocks.
+  It errors unless the node is Online and has a declaration not already
+  withdrawn.
 
 ## Build and run
 
@@ -73,8 +100,10 @@ exact shapes and where each one comes from.
   stake. A voucher becomes claimable the next epoch, and `leader_claim` mints the
   reward to the leader funding key.
 - **Blend.**
-  - `blend_join_as_core_node` validates the locator and note, pays the fee from the
-    SDP funding key and returns the declaration id once the tx is in the mempool.
+  - `blend_join_as_core_node` checks the locator like the ledger does: any
+    multiaddr, including DNS names and private IPs, but not `0.0.0.0`/`::` and
+    not one with `/p2p/`. It then checks the note, pays the fee from the SDP
+    funding key and returns the declaration id once the tx is in the mempool.
     Any funding or signing failure is the generic "channel closed" `RelayError`.
   - The ledger rejects a declaration that is a duplicate, uses a spent note, uses a
     note below `min_stake`, or uses an already locked note. It does so silently.
@@ -101,7 +130,8 @@ Environment variables, read when the node starts:
 | `LB_MOCK_POW_TICKETS_PER_BLOCK` | 1.0 | Mean tickets found per block while mining. |
 | `LB_MOCK_NETWORK_STAKE` | 2.968e15 | Total stake; lower it to win leader slots with test-sized stake. |
 | `LB_MOCK_BLEND_HIT_RATE` | 0.9 | Chance a core node gets an activity proof in an epoch. |
-| `LB_MOCK_BLEND_REACHABLE` | 1 | 0 = no Blend peers reach the node (no activity proofs). |
+| `LB_MOCK_BLEND_REACHABLE` | 1 | 0 = the Blend port is blocked: `blend_reachability` says so and no activity proofs land. |
+| `LB_MOCK_PUBLIC_IP` | 203.0.113.7 | The address AutoNAT confirms; empty = none confirmed (e.g. CGNAT). |
 | `LB_MOCK_BACKGROUND_TX_PER_BLOCK` | 0.7 | Other users' transfers per block (these feed the fees and the rewards). |
 | `LB_MOCK_PANIC_ON_REENTRY` | 1 | 0 = only warn when the FFI is called from a stream callback. |
 | `LB_MOCK_SEED` | fixed | Seed of the network's chain. |
@@ -109,7 +139,8 @@ Environment variables, read when the node starts:
 ## Not simulated
 
 - Forks and reorgs: every block is canonical.
-- The genesis block's contents: it has no transactions.
+- Genesis notes: the genesis block carries the chain inscription and the
+  deployment's Blend declarations, but not the initial token distribution.
 - Other providers' declarations beyond the deployment's genesis ones.
 - Exact tx hashes, note ids and fees: they have the right shapes and magnitudes,
   not the real hash functions.

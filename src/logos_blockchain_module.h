@@ -204,6 +204,43 @@ public:
     ) const;
     [[nodiscard]] StdLogosResult blend_info() const;
 
+    // Proposed in logos-blockchain-module#108; the node's C bindings don't have
+    // them yet, so outside the mock (mock/README.md) each one fails with a
+    // "not available yet" error.
+    //
+    // This node's Blend standing, as JSON. Works in every mode:
+    //   { "core_mode": bool,
+    //     "state": "not_declared" | "pending" | "activating" | "active" | "inactive" | "withdrawn",
+    //     "declaration": { "id", "provider_id", "zk_id", "locked_note_id", "locators",
+    //                      "created_epoch", "active_from_epoch", "withdraw_at" } | null,
+    //     "current_epoch": u32,
+    //     "network_size": u64,   // core declarations active this epoch
+    //     "activity": { "this_epoch": "pending" | "accepted" | "failed",
+    //                   "reason": null | "no_proof" | "fee_failed" | "post_failed" | "network_below_minimum",
+    //                   "tokens_collected": u64, "last_active_epoch": u32 | null, "last_fee": "<u64>" | null },
+    //     "session_peers": { "total": u64, "healthy": u64 } }
+    [[nodiscard]] StdLogosResult blend_status() const;
+    // Whether the Blend listening address is reachable from outside, from the
+    // node's own dial-back (logos-blockchain#3648), and the swarm's
+    // AutoNAT-confirmed external addresses, as JSON:
+    //   { "blend_address": "<multiaddr>", "reachable": bool | null, "checked_at": <unix secs> | null,
+    //     "confirmed_external_addresses": ["<multiaddr>", ...] }
+    // Fails immediately when the node isn't Online.
+    [[nodiscard]] StdLogosResult blend_reachability() const;
+    // The deployment's Blend rules; needs no running node. An empty path means
+    // the built-in deployment. As JSON:
+    //   { "min_stake": "<u64>", "activation_delay_epochs": u32, "inactivity_period": u32,
+    //     "minimum_network_size": u32, "unlock_delay_epochs": u32, "epoch_slots": u64,
+    //     "retention_period": u32 | null }
+    // unlock_delay_epochs: a withdrawal landing in epoch e unlocks the stake when
+    // epoch e + unlock_delay_epochs starts (the node serves through e + 1).
+    [[nodiscard]] static StdLogosResult blend_requirements(const std::string& custom_deployment_path);
+    // Withdraws this node's Blend declaration, as JSON:
+    //   { "tx_hash": "<hex>", "unlocks_at_epoch": u32 }
+    // unlocks_at_epoch assumes the withdrawal lands this epoch. Fails
+    // immediately when the node isn't Online or has nothing to withdraw.
+    [[nodiscard]] StdLogosResult blend_withdraw() const;
+
     // Chain
     // Chain ID of the deployment the running node was started with. Fixed for
     // the node's lifetime.
@@ -277,6 +314,17 @@ public:
     //     "tick_seconds": "<u64>",
     //     "auto_claim_targets": [ { "public_key", "threshold" } ] }
     [[nodiscard]] static StdLogosResult read_pow_config(const std::string& config_path);
+
+    // The Blend settings a config records, read from the file so it answers
+    // before a node exists:
+    //   { "listening_address": "<multiaddr>", "port": <u16> | null,
+    //     "provider_id": "<hex>", "zk_id": "<hex>", "sdp_funding_pk": "<hex>",
+    //     "external_address": "<multiaddr>" | "" }
+    // provider_id is the BlendSigning key and zk_id the BlendZk key: the two a
+    // declaration publishes, and the key that holds the stake and the rewards.
+    // external_address is the network's static NAT address, set at
+    // generate_user_config; empty when the node uses NAT traversal.
+    [[nodiscard]] static StdLogosResult read_blend_config(const std::string& config_path);
 
     // clang-format off
 // Clang-format only handles public/private/protected, so it miss-indents this section.

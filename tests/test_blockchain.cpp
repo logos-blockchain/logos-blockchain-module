@@ -467,6 +467,45 @@ LOGOS_TEST(blend_info_without_node_returns_error) {
     LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
 }
 
+// Proposed in #108 and not in the node yet: outside the mock they say so,
+// whether or not a node is running.
+LOGOS_TEST(blend_status_is_not_available_yet) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+    StdLogosResult result = module.blend_status();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "not available yet"));
+}
+
+LOGOS_TEST(blend_reachability_is_not_available_yet) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+    StdLogosResult result = module->blend_reachability();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "not available yet"));
+    delete module;
+}
+
+LOGOS_TEST(blend_withdraw_is_not_available_yet) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+    StdLogosResult result = module->blend_withdraw();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "not available yet"));
+    delete module;
+}
+
+LOGOS_TEST(blend_requirements_is_not_available_yet) {
+    auto t = LogosTestContext("blockchain_module");
+    StdLogosResult result = LogosBlockchainModule::blend_requirements("");
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "not available yet"));
+}
+
 LOGOS_TEST(get_chain_id_without_node_returns_error) {
     auto t = LogosTestContext("blockchain_module");
     LogosBlockchainModule module;
@@ -3070,6 +3109,43 @@ LOGOS_TEST(read_pow_config_reports_the_current_section) {
     // null stays null: it is the node's "one thread per logical CPU".
     LOGOS_ASSERT_TRUE(contains(json, "\"max_threads\":null"));
     LOGOS_ASSERT_TRUE(contains(json, "\"auto_claim_targets\":[]"));
+}
+
+// ---- Blend config (read_blend_config) ----
+
+static std::string writeBlendConfig(const TempDir& dir) {
+    const std::string path = dir.filePath("user_config.yaml");
+    std::ofstream(path) << R"(blend:
+  non_ephemeral_signing_key_id: 909b81d2f1304105deafdda77de75da2e956f31edf651aab5fb3624cd7e4eb33
+  core:
+    backend:
+      listening_address: /ip4/0.0.0.0/udp/3400/quic-v1
+    zk:
+      secret_key_kms_id: a68a78082be6648ae2e939f35c485b54eb41ec676746d56c942117e11947eb21
+sdp:
+  wallet:
+    funding_pk: 01b0b5b36af86c415e47068049d427c62a1b9511626742f2faa328c69494630c
+network:
+  backend:
+    swarm:
+      nat:
+        type: static
+        external_address: /ip4/203.0.113.7/udp/3000/quic-v1
+)";
+    return path;
+}
+
+LOGOS_TEST(read_blend_config_reports_port_and_keys) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    StdLogosResult result = LogosBlockchainModule::read_blend_config(writeBlendConfig(tmpDir));
+    LOGOS_ASSERT_TRUE(result.success);
+    const std::string json = result.value.get<std::string>();
+    LOGOS_ASSERT_TRUE(contains(json, "\"port\":3400"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"zk_id\":\"a68a78082be6"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"provider_id\":\"909b81d2f130"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"sdp_funding_pk\":\"01b0b5b36af8"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"external_address\":\"/ip4/203.0.113.7/udp/3000/quic-v1\""));
 }
 
 LOGOS_TEST(read_accounts_fails_on_a_missing_config) {
