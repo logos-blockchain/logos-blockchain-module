@@ -351,6 +351,14 @@ FfiStatusResult_____c_char blend_withdraw(const LogosBlockchainNode* node) {
     return {ownedString(out), ok()};
 }
 
+FfiStatusResult_____c_char sign_message(const LogosBlockchainNode* node, const char* domain, const uint8_t* payload,
+                                        size_t payload_len) {
+    NODE_OR_RETURN(FfiStatusResult_____c_char)
+    if (!domain || (!payload && payload_len > 0))
+        return {nullptr, status(NullPointer, "Received a null `domain` or `payload` pointer.")};
+    return {ownedString(n->signMessage(domain, std::vector<uint8_t>(payload, payload + payload_len))), ok()};
+}
+
 FfiStatusResult_DeclarationId blend_join_as_core_node(const LogosBlockchainNode* node, const char* locator,
                                                        const uint8_t* service_note_id) {
     NODE_OR_RETURN(FfiStatusResult_DeclarationId)

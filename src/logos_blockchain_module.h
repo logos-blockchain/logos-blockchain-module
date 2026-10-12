@@ -240,6 +240,14 @@ public:
     // unlocks_at_epoch assumes the withdrawal lands this epoch. Fails
     // immediately when the node isn't Online or has nothing to withdraw.
     [[nodiscard]] StdLogosResult blend_withdraw() const;
+    // Signs a message for another app with the node's BlendSigning key
+    // (provider_id), as JSON:
+    //   { "signature": "<hex, 64-byte Ed25519>", "public_key": "<hex>" }
+    // The signed bytes are always "logos-node-msg/v1" 0x00 domain 0x00 payload,
+    // so a message can never pass for a transaction or for another domain's.
+    // domain: 3-64 chars of [a-z0-9._/-], starting with a letter.
+    // payload_hex: up to 16 KiB. Fails when the node isn't running.
+    [[nodiscard]] StdLogosResult sign_message(const std::string& domain, const std::string& payload_hex) const;
 
     // Chain
     // Chain ID of the deployment the running node was started with. Fixed for the node's lifetime.

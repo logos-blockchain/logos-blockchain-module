@@ -259,6 +259,7 @@ public:
     Bytes32 leaderClaim(Error& err);
     Bytes32 blendJoin(const std::string& locator, const Bytes32& noteId, Error& err);
     std::string blendWithdraw(Error& err);
+    std::string signMessage(const std::string& domain, const std::vector<uint8_t>& payload);
 
     void powSetMining(bool on);
     void powSetAutoClaim(bool on);
