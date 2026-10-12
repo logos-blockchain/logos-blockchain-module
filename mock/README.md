@@ -12,8 +12,8 @@ transfers and joining Blend as a core node, plus their failure modes.
 
 ## Proposed calls (#108)
 
-`blend_status()`, `blend_reachability()`, `blend_requirements(path)` and
-`blend_withdraw()` are on the module but not in the node yet: `src/proposed_ffi.h` declares the C
+`blend_status()`, `blend_reachability()`, `blend_requirements(path)`,
+`blend_withdraw()` and `sign_message(domain, payload_hex)` are on the module but not in the node yet: `src/proposed_ffi.h` declares the C
 functions they need. Only this variant defines `LOGOS_BLOCKCHAIN_PROPOSED_FFI`
 and implements them, so in a normal build each call fails with "not available
 yet". The shapes are documented in `src/logos_blockchain_module.h`. When the
@@ -37,6 +37,9 @@ node ships a real binding, delete its declaration from `proposed_ffi.h` and the
   and when W+3 starts the declaration is removed and the stake note unlocks.
   It errors unless the node is Online and has a declaration not already
   withdrawn.
+- **`sign_message`.** Works whenever the node is running, Online or not, and
+  answers with the BlendSigning key as `public_key`. The signature is 64
+  deterministic bytes, not a real Ed25519 signature, so nothing can verify it.
 
 ## Build and run
 

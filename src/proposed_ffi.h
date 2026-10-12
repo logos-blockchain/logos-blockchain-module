@@ -17,6 +17,10 @@ FfiStatusResult_____c_char blend_reachability(const struct LogosBlockchainNode* 
 FfiStatusResult_____c_char blend_requirements(const char* custom_deployment_path);
 // Withdraws this node's own Blend declaration (the node HTTP API's /sdp/withdrawal).
 FfiStatusResult_____c_char blend_withdraw(const struct LogosBlockchainNode* node);
+// Signs "logos-node-msg/v1" 0x00 domain 0x00 payload with the BlendSigning key
+// (Ed25519). Answers { "signature": hex128, "public_key": hex64 }.
+FfiStatusResult_____c_char sign_message(const struct LogosBlockchainNode* node, const char* domain,
+                                        const uint8_t* payload, size_t payload_len);
 #ifdef __cplusplus
 }
 #endif

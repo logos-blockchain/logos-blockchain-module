@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <map>
+#include <regex>
 #include <functional>
 #include <nlohmann/json.hpp>
 #include <string>
@@ -1811,6 +1812,28 @@ StdLogosResult LogosBlockchainModule::blend_withdraw() const {
     return take_string(::blend_withdraw(node), "blend withdraw");
 #else
     return not_available("blend_withdraw");
+#endif
+}
+
+StdLogosResult LogosBlockchainModule::sign_message(const std::string& domain, const std::string& payload_hex) const {
+    static const std::regex domain_rule("[a-z][a-z0-9._/-]{2,63}");
+    if (!std::regex_match(domain, domain_rule)) {
+        return result::err("Invalid domain: 3-64 characters of a-z, 0-9, '.', '_', '/' or '-', starting with a letter.");
+    }
+    std::vector<uint8_t> payload;
+    if (!parse_hex_bytes(payload_hex, payload)) {
+        return result::err("Invalid payload: expected hex.");
+    }
+    if (payload.size() > 16 * 1024) {
+        return result::err("Invalid payload: more than 16 KiB.");
+    }
+#ifdef LOGOS_BLOCKCHAIN_PROPOSED_FFI
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+    return take_string(::sign_message(node, domain.c_str(), payload.data(), payload.size()), "signature");
+#else
+    return not_available("sign_message");
 #endif
 }
 

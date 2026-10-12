@@ -488,6 +488,39 @@ LOGOS_TEST(blend_reachability_is_not_available_yet) {
     delete module;
 }
 
+LOGOS_TEST(sign_message_is_not_available_yet) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+    StdLogosResult result = module->sign_message("lez-referral/register", "00ff");
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "not available yet"));
+    delete module;
+}
+
+// Checked before the node is asked, so these hold with or without one.
+LOGOS_TEST(sign_message_rejects_a_bad_domain) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+    for (const char* domain : {"", "ab", "Lez/register", "9lez", "lez register", "lez\nregister"}) {
+        StdLogosResult result = module.sign_message(domain, "00");
+        LOGOS_ASSERT_FALSE(result.success);
+        LOGOS_ASSERT_TRUE(contains(result.error, "Invalid domain"));
+    }
+    StdLogosResult tooLong = module.sign_message(std::string(65, 'a'), "00");
+    LOGOS_ASSERT_TRUE(contains(tooLong.error, "Invalid domain"));
+}
+
+LOGOS_TEST(sign_message_rejects_a_bad_payload) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+    LOGOS_ASSERT_TRUE(contains(module.sign_message("lez-referral/register", "abc").error, "expected hex"));
+    LOGOS_ASSERT_TRUE(contains(module.sign_message("lez-referral/register", "zz").error, "expected hex"));
+    LOGOS_ASSERT_TRUE(contains(module.sign_message("lez-referral/register", std::string(2 * 16 * 1024 + 2, 'a')).error,
+                               "16 KiB"));
+}
+
 LOGOS_TEST(blend_withdraw_is_not_available_yet) {
     auto t = LogosTestContext("blockchain_module");
     TempDir tmpDir;

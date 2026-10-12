@@ -2166,6 +2166,21 @@ std::string Node::blendWithdraw(Error& err) {
     return json({{"tx_hash", hex(hash)}, {"unlocks_at_epoch", epoch + 3}}).dump();
 }
 
+// The right shape, not a real Ed25519 signature: the same message always gets
+// the same 64 bytes, and a different message different ones.
+std::string Node::signMessage(const std::string& domain, const std::vector<uint8_t>& payload) {
+    std::lock_guard lock(m_mutex);
+    std::string message = "logos-node-msg/v1";
+    message.push_back('\0');
+    message += domain;
+    message.push_back('\0');
+    message.append(payload.begin(), payload.end());
+    LBLOG("sign_message: domain=%s, %zu payload bytes", domain.c_str(), payload.size());
+    return json{{"signature", hexOf(fold(m_cfg.blendSigningKey) ^ std::hash<std::string>{}(message), 64)},
+                {"public_key", hex(m_cfg.blendSigningKey)}}
+        .dump();
+}
+
 // ==== PoW ====================================================================
 
 void Node::powSetMining(bool on) {
