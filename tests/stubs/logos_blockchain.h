@@ -238,6 +238,7 @@ typedef struct { Hash value; OperationStatus error; } FfiPoWClaimResult;
 typedef struct { PoWClaimableRewards value; OperationStatus error; } FfiPoWClaimableRewardsResult;
 typedef struct { PoWStatus value; OperationStatus error; } FfiPoWStatusResult;
 typedef struct { char* value; OperationStatus error; } FfiGetChainIdResult;
+typedef struct { char* value; OperationStatus error; } FfiGetOpenMetricsResult;
 typedef struct { char* value; OperationStatus error; } FfiMergeUserConfigResult;
 typedef struct { NetworkInfo value; OperationStatus error; } FfiNetworkInfoResult;
 
@@ -333,6 +334,7 @@ StringResult blend_info(LogosBlockchainNode* node);
 
 // Chain
 FfiGetChainIdResult get_chain_id(const LogosBlockchainNode* node);
+FfiGetOpenMetricsResult get_open_metrics(const LogosBlockchainNode* node);
 
 // Network
 FfiNetworkInfoResult get_network_info(const LogosBlockchainNode* node);

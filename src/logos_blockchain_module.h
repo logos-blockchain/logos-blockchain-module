@@ -205,9 +205,13 @@ public:
     [[nodiscard]] StdLogosResult blend_info() const;
 
     // Chain
-    // Chain ID of the deployment the running node was started with. Fixed for
-    // the node's lifetime.
+    // Chain ID of the deployment the running node was started with. Fixed for the node's lifetime.
     [[nodiscard]] StdLogosResult get_chain_id() const;
+
+    // Metrics
+    // The running node's metrics as an OpenMetrics text document.
+    // Empty if the node is not running or the metrics can't be read.
+    [[nodiscard]] std::string collectOpenMetricsText() const;
 
     // Network
     // libp2p connectivity counters of the running node, as JSON:

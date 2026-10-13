@@ -7,4 +7,3 @@ A Logos core module that wraps the [logos-blockchain](https://github.com/logos-b
 ```bash
 nix build '.#lgx'
 ```
-
