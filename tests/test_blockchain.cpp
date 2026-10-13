@@ -475,6 +475,13 @@ LOGOS_TEST(get_chain_id_without_node_returns_error) {
     LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
 }
 
+LOGOS_TEST(collect_open_metrics_text_without_node_returns_empty) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+    LOGOS_ASSERT_TRUE(module.collectOpenMetricsText().empty());
+    LOGOS_ASSERT_FALSE(t.cFunctionCalled("get_open_metrics"));
+}
+
 LOGOS_TEST(get_network_info_without_node_returns_error) {
     auto t = LogosTestContext("blockchain_module");
     LogosBlockchainModule module;
@@ -1635,6 +1642,36 @@ LOGOS_TEST(get_chain_id_returns_error_on_ffi_failure) {
     StdLogosResult result = module->get_chain_id();
     LOGOS_ASSERT_FALSE(result.success);
     LOGOS_ASSERT_TRUE(contains(result.error, "mock error"));
+    delete module;
+}
+
+// Metrics
+
+LOGOS_TEST(collect_open_metrics_text_returns_document_on_success) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    const std::string document = "# TYPE cryptarchia_height gauge\ncryptarchia_height 42\n# EOF\n";
+    t.mockCFunction("get_open_metrics").returns(document.c_str());
+    t.mockCFunction("get_open_metrics_error").returns(0);
+
+    LOGOS_ASSERT_EQ(module->collectOpenMetricsText(), document);
+    LOGOS_ASSERT(t.cFunctionCalled("get_open_metrics"));
+    LOGOS_ASSERT(t.cFunctionCalled("free_cstring"));
+    delete module;
+}
+
+LOGOS_TEST(collect_open_metrics_text_returns_empty_on_ffi_failure) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("get_open_metrics_error").returns(1);
+
+    LOGOS_ASSERT_TRUE(module->collectOpenMetricsText().empty());
     delete module;
 }
 

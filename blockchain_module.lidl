@@ -32,6 +32,7 @@ module blockchain_module {
   method blend_join_as_core_node(locator: tstr, locked_note_id_hex: tstr) -> result
   method blend_info() -> result
   method get_chain_id() -> result
+  method collectOpenMetricsText() -> tstr
   method get_network_info() -> result
   method get_block(header_id_hex: tstr) -> result
   method get_blocks(from_slot: uint, to_slot: uint) -> result

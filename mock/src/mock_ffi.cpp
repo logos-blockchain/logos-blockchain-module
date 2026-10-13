@@ -201,6 +201,25 @@ FfiGetChainIdResult get_chain_id(const LogosBlockchainNode* node) {
     return r;
 }
 
+FfiGetOpenMetricsResult get_open_metrics(const LogosBlockchainNode* node) {
+    NODE_OR_RETURN(FfiGetOpenMetricsResult)
+    const lbmock::CryptarchiaView chain = n->cryptarchiaInfo();
+    const lbmock::NetworkView net = n->networkInfo();
+    const std::string text = "# TYPE cryptarchia_height gauge\n"
+                             "cryptarchia_height " + std::to_string(chain.height) + "\n"
+                             "# TYPE cryptarchia_tip_slot gauge\n"
+                             "cryptarchia_tip_slot " + std::to_string(chain.slot) + "\n"
+                             "# TYPE cryptarchia_lib_slot gauge\n"
+                             "cryptarchia_lib_slot " + std::to_string(chain.libSlot) + "\n"
+                             "# TYPE network_peers gauge\n"
+                             "network_peers " + std::to_string(net.peers) + "\n"
+                             "# EOF\n";
+    FfiGetOpenMetricsResult r{};
+    r.value = ownedString(text);
+    r.error = ok();
+    return r;
+}
+
 FfiCryptarchiaInfoResult get_cryptarchia_info(const LogosBlockchainNode* node) {
     NODE_OR_RETURN(FfiCryptarchiaInfoResult)
     const lbmock::CryptarchiaView v = n->cryptarchiaInfo();

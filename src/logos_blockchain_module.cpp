@@ -1729,6 +1729,28 @@ StdLogosResult LogosBlockchainModule::get_chain_id() const {
     return result::ok(std::move(out));
 }
 
+// Metrics
+
+std::string LogosBlockchainModule::collectOpenMetricsText() const {
+    if (!node) {
+        fprintf(stderr, "Failed to collect OpenMetrics: the node is not running.\n");
+        return {};
+    }
+
+    auto [value, error] = ::get_open_metrics(node);
+    if (!is_ok(&error)) {
+        fprintf(stderr, "Failed to collect OpenMetrics: %s\n", operation_status::take_message(error).c_str());
+        return {};
+    }
+
+    std::string out(value);
+    OperationStatus free_status = free_cstring(value);
+    if (!is_ok(&free_status)) {
+        fprintf(stderr, "Failed to free OpenMetrics document: %s\n", operation_status::take_message(free_status).c_str());
+    }
+    return out;
+}
+
 // Network
 
 StdLogosResult LogosBlockchainModule::get_network_info() const {
