@@ -165,20 +165,20 @@ namespace {
 
     // Wrapper that owns data and provides GenerateConfigArgs
     struct OwnedGenerateConfigArgs {
-        std::vector<std::string> initial_peers_data;
+        std::vector<std::string> initial_peers;
         std::vector<const char*> initial_peers_ptrs;
-        uint32_t initial_peers_count_val;
-        std::string output_data;
-        uint16_t net_port_val;
-        uint16_t blend_port_val;
-        std::string http_addr_data;
-        std::string external_address_data;
-        std::string state_path_data;
-        std::string storage_path_data;
-        std::string logs_path_data;
-        bool skip_ibd_val;
-        std::string log_filter_data;
-        std::string kms_file_data;
+        uint32_t initial_peers_count;
+        std::string output;
+        uint16_t net_port;
+        uint16_t blend_port;
+        std::string http_addr;
+        std::string external_address;
+        std::string state_path;
+        std::string storage_path;
+        std::string logs_path;
+        bool skip_ibd;
+        std::string log_filter;
+        std::string kms_file;
 
         // The FFI struct with pointers into owned data
         GenerateConfigArgs ffi_args{};
@@ -188,16 +188,16 @@ namespace {
             // initial_peers (JSON array -> const char**)
             if (args.contains("initial_peers") && args["initial_peers"].is_array()) {
                 for (const auto& peer : args["initial_peers"]) {
-                    initial_peers_data.push_back(peer.get<std::string>());
+                    initial_peers.push_back(peer.get<std::string>());
                 }
-                initial_peers_count_val = static_cast<uint32_t>(initial_peers_data.size());
+                initial_peers_count = static_cast<uint32_t>(initial_peers.size());
 
-                for (const std::string& data : initial_peers_data) {
+                for (const std::string& data : initial_peers) {
                     initial_peers_ptrs.push_back(data.c_str());
                 }
 
                 ffi_args.initial_peers = initial_peers_ptrs.data();
-                ffi_args.initial_peers_count = &initial_peers_count_val;
+                ffi_args.initial_peers_count = &initial_peers_count;
             } else {
                 ffi_args.initial_peers = nullptr;
                 ffi_args.initial_peers_count = nullptr;
@@ -205,88 +205,88 @@ namespace {
 
             // output (string -> const char*)
             if (args.contains("output") && args["output"].is_string()) {
-                output_data = args["output"].get<std::string>();
-                ffi_args.output = output_data.c_str();
+                output = args["output"].get<std::string>();
+                ffi_args.output = output.c_str();
             } else {
                 ffi_args.output = nullptr;
             }
 
             // net_port (int -> const uint16_t*)
             if (args.contains("net_port") && args["net_port"].is_number_integer()) {
-                net_port_val = static_cast<uint16_t>(args["net_port"].get<int>());
-                ffi_args.net_port = &net_port_val;
+                net_port = static_cast<uint16_t>(args["net_port"].get<int>());
+                ffi_args.net_port = &net_port;
             } else {
                 ffi_args.net_port = nullptr;
             }
 
             // blend_port (int -> const uint16_t*)
             if (args.contains("blend_port") && args["blend_port"].is_number_integer()) {
-                blend_port_val = static_cast<uint16_t>(args["blend_port"].get<int>());
-                ffi_args.blend_port = &blend_port_val;
+                blend_port = static_cast<uint16_t>(args["blend_port"].get<int>());
+                ffi_args.blend_port = &blend_port;
             } else {
                 ffi_args.blend_port = nullptr;
             }
 
             // http_addr (string -> const char*)
             if (args.contains("http_addr") && args["http_addr"].is_string()) {
-                http_addr_data = args["http_addr"].get<std::string>();
-                ffi_args.http_addr = http_addr_data.c_str();
+                http_addr = args["http_addr"].get<std::string>();
+                ffi_args.http_addr = http_addr.c_str();
             } else {
                 ffi_args.http_addr = nullptr;
             }
 
             // external_address (string -> const char*)
             if (args.contains("external_address") && args["external_address"].is_string()) {
-                external_address_data = args["external_address"].get<std::string>();
-                ffi_args.external_address = external_address_data.c_str();
+                external_address = args["external_address"].get<std::string>();
+                ffi_args.external_address = external_address.c_str();
             } else {
                 ffi_args.external_address = nullptr;
             }
 
             // state_path (string -> const char*)
             if (args.contains("state_path") && args["state_path"].is_string()) {
-                state_path_data = args["state_path"].get<std::string>();
-                ffi_args.state_path = state_path_data.c_str();
+                state_path = args["state_path"].get<std::string>();
+                ffi_args.state_path = state_path.c_str();
             } else {
                 ffi_args.state_path = nullptr;
             }
 
             // storage_path (string -> const char*) — maps to storage.backend.folder_name
             if (args.contains("storage_path") && args["storage_path"].is_string()) {
-                storage_path_data = args["storage_path"].get<std::string>();
-                ffi_args.storage_path = storage_path_data.c_str();
+                storage_path = args["storage_path"].get<std::string>();
+                ffi_args.storage_path = storage_path.c_str();
             } else {
                 ffi_args.storage_path = nullptr;
             }
 
             // logs_path (string -> const char*) — maps to tracing.logger.file.directory
             if (args.contains("logs_path") && args["logs_path"].is_string()) {
-                logs_path_data = args["logs_path"].get<std::string>();
-                ffi_args.logs_path = logs_path_data.c_str();
+                logs_path = args["logs_path"].get<std::string>();
+                ffi_args.logs_path = logs_path.c_str();
             } else {
                 ffi_args.logs_path = nullptr;
             }
 
             // skip_ibd (bool -> const bool*)
             if (args.contains("skip_ibd") && args["skip_ibd"].is_boolean()) {
-                skip_ibd_val = args["skip_ibd"].get<bool>();
-                ffi_args.skip_ibd = &skip_ibd_val;
+                skip_ibd = args["skip_ibd"].get<bool>();
+                ffi_args.skip_ibd = &skip_ibd;
             } else {
                 ffi_args.skip_ibd = nullptr;
             }
 
             // log_filter (string -> const char*)
             if (args.contains("log_filter") && args["log_filter"].is_string()) {
-                log_filter_data = args["log_filter"].get<std::string>();
-                ffi_args.log_filter = log_filter_data.c_str();
+                log_filter = args["log_filter"].get<std::string>();
+                ffi_args.log_filter = log_filter.c_str();
             } else {
                 ffi_args.log_filter = nullptr;
             }
 
             // kms_file (string -> const char*)
             if (args.contains("kms_file") && args["kms_file"].is_string()) {
-                kms_file_data = args["kms_file"].get<std::string>();
-                ffi_args.kms_file = kms_file_data.c_str();
+                kms_file = args["kms_file"].get<std::string>();
+                ffi_args.kms_file = kms_file.c_str();
             } else {
                 ffi_args.kms_file = nullptr;
             }
