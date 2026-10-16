@@ -1751,6 +1751,22 @@ std::string LogosBlockchainModule::collectOpenMetricsText() const {
     return out;
 }
 
+// Version
+
+StdLogosResult LogosBlockchainModule::get_build_version_info() {
+    auto [value, error] = ::get_build_version_info();
+    if (!is_ok(&error)) {
+        return result::err(operation_status::take_message(error));
+    }
+
+    std::string out(value);
+    OperationStatus free_status = free_cstring(value);
+    if (!is_ok(&free_status)) {
+        fprintf(stderr, "Failed to free build version info: %s\n", operation_status::take_message(free_status).c_str());
+    }
+    return result::ok(std::move(out));
+}
+
 // Network
 
 StdLogosResult LogosBlockchainModule::get_network_info() const {

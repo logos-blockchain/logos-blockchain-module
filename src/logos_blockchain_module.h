@@ -213,6 +213,12 @@ public:
     // Empty if the node is not running or the metrics can't be read.
     [[nodiscard]] std::string collectOpenMetricsText() const;
 
+    // Version
+    // Version and build provenance of the node library, as JSON:
+    // { version, commit, tag, target, profile, rustc }
+    // Doesn't need a running node.
+    [[nodiscard]] static StdLogosResult get_build_version_info();
+
     // Network
     // libp2p connectivity counters of the running node, as JSON:
     //   { n_peers, n_connections, n_pending_connections, n_discovered_peers }

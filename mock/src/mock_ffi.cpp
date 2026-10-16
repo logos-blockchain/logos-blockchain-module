@@ -220,6 +220,15 @@ FfiGetOpenMetricsResult get_open_metrics(const LogosBlockchainNode* node) {
     return r;
 }
 
+// ---- version ------------------------------------------------------------------
+
+FfiGetBuildVersionInfoResult get_build_version_info(void) {
+    FfiGetBuildVersionInfoResult r{};
+    r.value = ownedString(R"({"version":"0.0.0-mock","commit":null,"tag":null,"target":"mock","profile":"mock","rustc":"mock"})");
+    r.error = ok();
+    return r;
+}
+
 FfiCryptarchiaInfoResult get_cryptarchia_info(const LogosBlockchainNode* node) {
     NODE_OR_RETURN(FfiCryptarchiaInfoResult)
     const lbmock::CryptarchiaView v = n->cryptarchiaInfo();
