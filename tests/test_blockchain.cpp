@@ -1675,6 +1675,34 @@ LOGOS_TEST(collect_open_metrics_text_returns_empty_on_ffi_failure) {
     delete module;
 }
 
+// Version
+
+LOGOS_TEST(get_build_version_info_returns_json_without_node) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+
+    const std::string json = R"({"version":"0.3.0","commit":"abc1234","tag":null,"target":"x86_64-unknown-linux-gnu","profile":"release","rustc":"1.99.0"})";
+    t.mockCFunction("get_build_version_info").returns(json.c_str());
+    t.mockCFunction("get_build_version_info_error").returns(0);
+
+    StdLogosResult result = module.get_build_version_info();
+    LOGOS_ASSERT_TRUE(result.success);
+    LOGOS_ASSERT_EQ(result.value.get<std::string>(), json);
+    LOGOS_ASSERT(t.cFunctionCalled("get_build_version_info"));
+    LOGOS_ASSERT(t.cFunctionCalled("free_cstring"));
+}
+
+LOGOS_TEST(get_build_version_info_returns_error_on_ffi_failure) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+
+    t.mockCFunction("get_build_version_info_error").returns(1);
+
+    StdLogosResult result = module.get_build_version_info();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "mock error"));
+}
+
 // Network
 
 LOGOS_TEST(get_network_info_returns_json_on_success) {

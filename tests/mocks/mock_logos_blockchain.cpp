@@ -421,6 +421,15 @@ FfiGetOpenMetricsResult get_open_metrics(const LogosBlockchainNode* node) {
     return result;
 }
 
+FfiGetBuildVersionInfoResult get_build_version_info(void) {
+    LOGOS_CMOCK_RECORD("get_build_version_info");
+    FfiGetBuildVersionInfoResult result;
+    const char* json = LOGOS_CMOCK_RETURN_STRING("get_build_version_info");
+    result.value = json ? strdup(json) : nullptr;
+    result.error = make_status(LOGOS_CMOCK_RETURN(int, "get_build_version_info_error"));
+    return result;
+}
+
 FfiNetworkInfoResult get_network_info(const LogosBlockchainNode* node) {
     LOGOS_CMOCK_RECORD("get_network_info");
     FfiNetworkInfoResult result;
