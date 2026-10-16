@@ -93,6 +93,7 @@ extern std::string g_lastGeneratedOutput;
 extern std::string g_lastGeneratedStatePath;
 extern std::string g_lastGeneratedStoragePath;
 extern std::string g_lastGeneratedLogsPath;
+extern std::string g_lastGeneratedEnableOpenMetrics;
 extern std::string g_lastMergeExtraYaml;
 extern MergeConfigFlags g_lastMergeFlags;
 
@@ -101,6 +102,7 @@ static void clearGeneratedPaths() {
     g_lastGeneratedStatePath.clear();
     g_lastGeneratedStoragePath.clear();
     g_lastGeneratedLogsPath.clear();
+    g_lastGeneratedEnableOpenMetrics.clear();
 }
 
 // Basecamp opts in with the flag: output and state/storage/logs are routed under
@@ -222,10 +224,36 @@ LOGOS_TEST(generate_user_config_with_all_fields) {
         "state_path": "/tmp/state",
         "ibd": true,
         "log_filter": "warn,logos_blockchain=debug",
-        "kms_file": "/tmp/kms.yaml"
+        "kms_file": "/tmp/kms.yaml",
+        "enable_open_metrics": true
     })";
 
     LOGOS_ASSERT_TRUE(module.generate_user_config(args).success);
+}
+
+LOGOS_TEST(generate_user_config_passes_enable_open_metrics) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+
+    t.mockCFunction("generate_user_config").returns(0);
+    clearGeneratedPaths();
+
+    LOGOS_ASSERT_TRUE(module.generate_user_config(R"({"output":"/tmp/out.json","enable_open_metrics":false})").success);
+    LOGOS_ASSERT_EQ(g_lastGeneratedEnableOpenMetrics, std::string("false"));
+
+    LOGOS_ASSERT_TRUE(module.generate_user_config(R"({"output":"/tmp/out.json","enable_open_metrics":true})").success);
+    LOGOS_ASSERT_EQ(g_lastGeneratedEnableOpenMetrics, std::string("true"));
+}
+
+LOGOS_TEST(generate_user_config_leaves_enable_open_metrics_unset_when_omitted) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+
+    t.mockCFunction("generate_user_config").returns(0);
+    clearGeneratedPaths();
+
+    LOGOS_ASSERT_TRUE(module.generate_user_config(R"({"output":"/tmp/out.json"})").success);
+    LOGOS_ASSERT_EQ(g_lastGeneratedEnableOpenMetrics, std::string("<null>"));
 }
 
 // ============================================================================

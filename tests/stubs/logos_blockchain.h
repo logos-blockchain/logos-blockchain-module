@@ -70,6 +70,7 @@ typedef struct {
     const bool* skip_ibd;
     const char* log_filter;
     const char* kms_file;
+    const bool* enable_open_metrics;
 } GenerateConfigArgs;
 
 // Arguments for transfer_funds

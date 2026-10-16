@@ -15,6 +15,7 @@ std::string g_lastGeneratedOutput;
 std::string g_lastGeneratedStatePath;
 std::string g_lastGeneratedStoragePath;
 std::string g_lastGeneratedLogsPath;
+std::string g_lastGeneratedEnableOpenMetrics;
 
 // Captures the raw claim address passed to the most recent pow_claim call so
 // tests can assert the module forwards it. A null pointer is recorded as the
@@ -62,6 +63,8 @@ OperationStatus generate_user_config(GenerateConfigArgs args) {
     g_lastGeneratedStatePath = args.state_path ? args.state_path : "<null>";
     g_lastGeneratedStoragePath = args.storage_path ? args.storage_path : "<null>";
     g_lastGeneratedLogsPath = args.logs_path ? args.logs_path : "<null>";
+    g_lastGeneratedEnableOpenMetrics =
+        args.enable_open_metrics ? (*args.enable_open_metrics ? "true" : "false") : "<null>";
     return make_status(LOGOS_CMOCK_RETURN(int, "generate_user_config"));
 }
 
