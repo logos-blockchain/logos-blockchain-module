@@ -179,6 +179,7 @@ namespace {
         bool skip_ibd;
         std::string log_filter;
         std::string kms_file;
+        bool enable_open_metrics;
 
         // The FFI struct with pointers into owned data
         GenerateConfigArgs ffi_args{};
@@ -289,6 +290,14 @@ namespace {
                 ffi_args.kms_file = kms_file.c_str();
             } else {
                 ffi_args.kms_file = nullptr;
+            }
+
+            // enable_open_metrics (bool -> const bool*)
+            if (args.contains("enable_open_metrics") && args["enable_open_metrics"].is_boolean()) {
+                enable_open_metrics = args["enable_open_metrics"].get<bool>();
+                ffi_args.enable_open_metrics = &enable_open_metrics;
+            } else {
+                ffi_args.enable_open_metrics = nullptr;
             }
         }
     };

@@ -9,7 +9,7 @@
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder/0.3.1";
-    logos-blockchain.url = "github:logos-blockchain/logos-blockchain/master";
+    logos-blockchain.url = "github:logos-blockchain/logos-blockchain?ref=chore/config/open-metrics-args";
   };
 
   outputs = inputs@{ self, logos-module-builder, ... }:
