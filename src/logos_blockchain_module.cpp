@@ -653,6 +653,9 @@ StdLogosResult LogosBlockchainModule::start(const std::string& config_path, cons
     }
 
     node = value;
+    if (node) {
+        node_config_path = effective_config_path;
+    }
 
     if (!node) {
         return result::err("Could not subscribe to block events: the node is not running.");
@@ -709,6 +712,7 @@ StdLogosResult LogosBlockchainModule::stop() {
     }
 
     node = nullptr;
+    node_config_path.clear();
     is_new_blocks_subscribed = false;
     is_processed_blocks_subscribed = false;
     is_lib_blocks_subscribed = false;
@@ -1061,8 +1065,11 @@ StdLogosResult LogosBlockchainModule::pow_configure(
 
 
 // The accounts a config records, named from the keystore beside it
-StdLogosResult LogosBlockchainModule::read_accounts(const std::string& config_path) {
-    const fs::path config = localPathFromFileUrl(config_path);
+StdLogosResult LogosBlockchainModule::read_accounts(const std::string& config_path) const {
+    if (config_path.empty() && !node) {
+        return result::err("No node is running, so there is no config to read; pass its path.");
+    }
+    const fs::path config = localPathFromFileUrl(config_path.empty() ? node_config_path : config_path);
     if (config.empty()) {
         return result::err("Config path was not specified.");
     }

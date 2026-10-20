@@ -3039,7 +3039,7 @@ LOGOS_TEST(read_accounts_reports_accounts_roles_and_titles) {
     const std::string config = writeGeneratedConfig(tmpDir);
     writeKeystore(tmpDir, KEYSTORE);
 
-    StdLogosResult result = LogosBlockchainModule::read_accounts(config);
+    StdLogosResult result = LogosBlockchainModule().read_accounts(config);
     LOGOS_ASSERT_TRUE(result.success);
     const std::string json = result.value.get<std::string>();
 
@@ -3054,6 +3054,31 @@ LOGOS_TEST(read_accounts_reports_accounts_roles_and_titles) {
     LOGOS_ASSERT_TRUE(contains(json, "\"title\":\"Mining\""));
 }
 
+// Another app's module doesn't know where the running node's config is: an empty path reads
+// the one it was started with, and only while it runs.
+LOGOS_TEST(read_accounts_without_a_path_reads_the_running_nodes_config) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    const std::string config = writeGeneratedConfig(tmpDir);
+    writeKeystore(tmpDir, KEYSTORE);
+    LogosBlockchainModule module;
+
+    const StdLogosResult before = module.read_accounts("");
+    LOGOS_ASSERT_FALSE(before.success);
+    LOGOS_ASSERT_TRUE(contains(before.error, "No node is running"));
+
+    t.mockCFunction("start_lb_node").returns(1);
+    t.mockCFunction("subscribe_to_new_blocks").returns(0);
+    LOGOS_ASSERT_TRUE(module.start(config, "").success);
+    const StdLogosResult running = module.read_accounts("");
+    LOGOS_ASSERT_TRUE(running.success);
+    LOGOS_ASSERT_EQ(running.value.get<std::string>(), module.read_accounts(config).value.get<std::string>());
+    LOGOS_ASSERT_TRUE(contains(running.value.get<std::string>(), "\"public_key\":\"" + LEADER_FUNDING_PK + "\""));
+
+    LOGOS_ASSERT_TRUE(module.stop().success);
+    LOGOS_ASSERT_FALSE(module.read_accounts("").success);
+}
+
 // The keystore is expected to become password-protected. Titles are decoration,
 // so losing them must not fail the account list.
 LOGOS_TEST(read_accounts_survives_an_unreadable_keystore) {
@@ -3062,7 +3087,7 @@ LOGOS_TEST(read_accounts_survives_an_unreadable_keystore) {
     const std::string config = writeGeneratedConfig(tmpDir);
     // No keystore written at all.
 
-    StdLogosResult result = LogosBlockchainModule::read_accounts(config);
+    StdLogosResult result = LogosBlockchainModule().read_accounts(config);
     LOGOS_ASSERT_TRUE(result.success);
     const std::string json = result.value.get<std::string>();
     LOGOS_ASSERT_TRUE(contains(json, LEADER_FUNDING_PK));
@@ -3077,7 +3102,7 @@ LOGOS_TEST(read_accounts_never_reports_secret_keys) {
     writeKeystore(tmpDir, KEYSTORE);
 
     const std::string json =
-        LogosBlockchainModule::read_accounts(config).value.get<std::string>();
+        LogosBlockchainModule().read_accounts(config).value.get<std::string>();
     LOGOS_ASSERT_FALSE(contains(json, MINING_SECRET));
     LOGOS_ASSERT_FALSE(contains(json, SAVINGS_SECRET));
     LOGOS_ASSERT_FALSE(contains(json, "Ed25519"));
@@ -3113,6 +3138,6 @@ LOGOS_TEST(read_accounts_fails_on_a_missing_config) {
     auto t = LogosTestContext("blockchain_module");
     TempDir tmpDir;
     LOGOS_ASSERT_FALSE(
-        LogosBlockchainModule::read_accounts(tmpDir.filePath("nope.yaml")).success
+        LogosBlockchainModule().read_accounts(tmpDir.filePath("nope.yaml")).success
     );
 }
