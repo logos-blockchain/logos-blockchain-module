@@ -274,7 +274,9 @@ public:
     //                     "roles": ["leader_funding"|"sdp_funding"|
     //                               "voucher_master"|"blend_signing"] } ],
     //     "keystore_keys": [ { "key_id": "<hex>", "title": "<name>" } ] }
-    [[nodiscard]] static StdLogosResult read_accounts(const std::string& config_path);
+    // An empty path reads the config the running node was started with, so a caller (another
+    // app's module) needn't know where it is; it fails when no node is running.
+    [[nodiscard]] StdLogosResult read_accounts(const std::string& config_path) const;
 
     // The pow section as the config holds it, in the shape pow_configure takes.
     //   { "max_threads": "<u64>"|null, "max_tickets_per_block": "<u64>",
@@ -306,6 +308,8 @@ logos_events:
 
 private:
     LogosBlockchainNode* node = nullptr;
+    // The config the running node was started with, as start() resolved it; empty while stopped.
+    std::string node_config_path;
 
     // Whether each stream is currently subscribed
     std::atomic<bool> is_new_blocks_subscribed{false};
