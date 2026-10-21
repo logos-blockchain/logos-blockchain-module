@@ -37,54 +37,59 @@ prerequisites:
   - "**A Linux or macOS machine.** No display and no network peers are required."
 
 sections:
-  - title: "Build the tools and install the module"
+  - title: "Build the CLI and the module"
     step: true
     text: |
       Same preparation as the [config doc-test](./blockchain-module-config.md):
-      the runtime CLI, the package manager, and this commit of the module
-      packaged as an `.lgx`. Building the `.lgx` compiles the bundled
+      the runtime CLI and this commit of the module packaged as an `.lgx`. Building the `.lgx` compiles the bundled
       `logos_blockchain` native library, so it is the slow step.
     steps:
       - title: "Build the Logos daemon CLI"
-        run: "nix build 'github:logos-co/logos-logoscore-cli' --out-link ./logos"
+        run: "nix build 'github:logos-co/logos-logoscore-cli#ctl' --out-link ./logos"
         code_block: |
-          nix build 'github:logos-co/logos-logoscore-cli' --out-link ./logos
-        check_file: "logos/bin/logoscore"
-
-      - title: "Build lgpm"
-        run: "nix build 'github:logos-co/logos-package-manager' --out-link ./lgpm"
-        code_block: |
-          nix build 'github:logos-co/logos-package-manager' --out-link ./lgpm
-        check_file: "lgpm/bin/lgpm"
+          nix build 'github:logos-co/logos-logoscore-cli#ctl' --out-link ./logos
+        check_file: "logos/bin/logosctl"
 
       - title: "Build the module's .lgx package"
         run: "nix build 'github:logos-blockchain/logos-blockchain-module{release}#lgx' --out-link ./blockchain-lgx"
         code_block: |
           nix build 'github:logos-blockchain/logos-blockchain-module{release}#lgx' --out-link ./blockchain-lgx
 
-      - title: "Install it into a modules directory"
-        run: "./lgpm/bin/lgpm --modules-dir ./modules install --dir ./blockchain-lgx"
-        code_block: |
-          lgpm --modules-dir ./modules install --dir ./blockchain-lgx
-        expect_contains:
-          - "blockchain_module"
-        check_file: "modules/blockchain_module/manifest.json"
-
-  - title: "Start the daemon and load the module"
+  - title: "Start the daemon, install and load the module"
     step: true
     text: |
-      Run the daemon and load the plugin. Loading brings the plugin into the
-      process — it does **not** start a blockchain node.
+      Run the daemon, install the package into its session, and load the plugin.
+      Loading brings the plugin into the process — it does **not** start a
+      blockchain node.
     steps:
       - title: "Start the daemon"
-        run: "./logos/bin/logoscore stop >/dev/null 2>&1; sleep 2; LOG_BACKEND=file LOG_DIR=$PWD LOG_PATH=node.log ./logos/bin/logoscore daemon --modules-dir ./modules --persistence-path ./data >/dev/null 2>&1 &"
+        text: |
+          The session directory, `./session`, holds the daemon's config, its
+          installed modules and their data. `--detach` returns once the daemon
+          accepts commands.
+        # The bundled package downloader starts a storage node in $HOME; keep it
+        # out of the real one.
+        run: "mkdir -p home && HOME=\"$PWD/home\" LOG_BACKEND=file LOG_DIR=$PWD LOG_PATH=node.log ./logos/bin/logosctl --config-dir ./session daemon start --detach"
         code_block: |
-          logoscore daemon --modules-dir ./modules --persistence-path ./data
+          LOG_BACKEND=file LOG_DIR=$PWD LOG_PATH=node.log logosctl daemon start --detach
+        expect_contains:
+          - "Daemon started"
+
+      - title: "Install the module"
+        text: |
+          `--dir` installs every `.lgx` in a directory, with no catalog involved.
+          `-y` confirms, since there is no terminal to ask on.
+        run: "./logos/bin/logosctl --config-dir ./session install --dir ./blockchain-lgx -y"
+        code_block: |
+          logosctl install --dir ./blockchain-lgx -y
+        expect_contains:
+          - '"installed":["blockchain_module"]'
+        check_file: "session/modules/blockchain_module/manifest.json"
 
       - title: "Load the module"
-        run: "sleep 8; ./logos/bin/logoscore load-module blockchain_module"
+        run: "./logos/bin/logosctl --config-dir ./session module load blockchain_module"
         code_block: |
-          logoscore load-module blockchain_module
+          logosctl module load blockchain_module
         expect_contains:
           - "blockchain_module"
 
@@ -96,9 +101,9 @@ sections:
       most often in practice:
     steps:
       - title: "Ask for chain info with no node"
-        run: "./logos/bin/logoscore call blockchain_module get_cryptarchia_info"
+        run: "./logos/bin/logosctl --config-dir ./session call blockchain_module get_cryptarchia_info"
         code_block: |
-          logoscore call blockchain_module get_cryptarchia_info
+          logosctl call blockchain_module get_cryptarchia_info
         expect_contains:
           - "The node is not running."
 
@@ -122,9 +127,9 @@ sections:
             }
 
       - title: "Generate it"
-        run: "./logos/bin/logoscore call blockchain_module generate_user_config @runtime-args.json"
+        run: "./logos/bin/logosctl --config-dir ./session call blockchain_module generate_user_config @runtime-args.json"
         code_block: |
-          logoscore call blockchain_module generate_user_config @runtime-args.json
+          logosctl call blockchain_module generate_user_config @runtime-args.json
         expect_contains:
           - '"success":true'
           - "user_config.yaml"
@@ -138,7 +143,7 @@ sections:
         text: |
           `skip_ibd` writes an empty IBD peer list into the config, which is what
           makes the node skip bootstrap rather than try to sync:
-        run: "CFG=$(find . $HOME/.logoscore -name user_config.yaml -path '*blockchain_module*' 2>/dev/null | head -1); echo using $CFG; grep -A1 'ibd:' $CFG"
+        run: "CFG=$(find ./session -name user_config.yaml -path '*blockchain_module*' 2>/dev/null | head -1); echo using $CFG; grep -A1 'ibd:' $CFG"
         code_block: |
           grep -A1 'ibd:' <generated>/user_config.yaml
         expect_contains:
@@ -151,7 +156,7 @@ sections:
           switching to `Online`. That is sensible for joining a real network and
           useless for a test, so patch it down. `generate_user_config` does not
           expose this knob, so we edit the YAML directly.
-        run: "CFG=$(find . $HOME/.logoscore -name user_config.yaml -path '*blockchain_module*' 2>/dev/null | head -1); sed \"s/prolonged_bootstrap_period: '3600.000000000'/prolonged_bootstrap_period: '5.000000000'/\" $CFG > $CFG.tmp && mv $CFG.tmp $CFG && grep -n prolonged_bootstrap_period $CFG"
+        run: "CFG=$(find ./session -name user_config.yaml -path '*blockchain_module*' 2>/dev/null | head -1); sed \"s/prolonged_bootstrap_period: '3600.000000000'/prolonged_bootstrap_period: '5.000000000'/\" $CFG > $CFG.tmp && mv $CFG.tmp $CFG && grep -n prolonged_bootstrap_period $CFG"
         code_block: |
           # sed -i differs between GNU and BSD/macOS, so write and move instead.
           sed "s/prolonged_bootstrap_period: '3600.000000000'/prolonged_bootstrap_period: '5.000000000'/" \
@@ -170,9 +175,9 @@ sections:
       phase to wait through, so `start` returns once the runtime is up.
     steps:
       - title: "Start it"
-        run: "CFG=$(find . $HOME/.logoscore -name user_config.yaml -path '*blockchain_module*' 2>/dev/null | head -1); ./logos/bin/logoscore call blockchain_module start $CFG ''"
+        run: "CFG=$(find ./session -name user_config.yaml -path '*blockchain_module*' 2>/dev/null | head -1); ./logos/bin/logosctl --config-dir ./session call blockchain_module start $CFG ''"
         code_block: |
-          logoscore call blockchain_module start <generated>/user_config.yaml ""
+          logosctl call blockchain_module start <generated>/user_config.yaml ""
         expect_contains:
           - '"success":true'
         post_text: |
@@ -207,9 +212,9 @@ sections:
       node with nothing synced, tip and LIB are both genesis.
     steps:
       - title: "Read chain state"
-        run: "./logos/bin/logoscore call blockchain_module get_cryptarchia_info"
+        run: "./logos/bin/logosctl --config-dir ./session call blockchain_module get_cryptarchia_info"
         code_block: |
-          logoscore call blockchain_module get_cryptarchia_info
+          logosctl call blockchain_module get_cryptarchia_info
         expect_contains:
           - '"success":true'
           - '"mode\":\"Bootstrapping'
@@ -222,9 +227,9 @@ sections:
           After the (shortened) prolonged-bootstrap period the mode flips to
           `Online`. This is the transition the blend service is waiting on when it
           logs *"Waiting for chain to become Online mode"*.
-        run: "sleep 15 && ./logos/bin/logoscore call blockchain_module get_cryptarchia_info"
+        run: "sleep 15 && ./logos/bin/logosctl --config-dir ./session call blockchain_module get_cryptarchia_info"
         code_block: |
-          logoscore call blockchain_module get_cryptarchia_info
+          logosctl call blockchain_module get_cryptarchia_info
         expect_contains:
           - '"mode\":\"Online'
         post_text: |
@@ -241,9 +246,9 @@ sections:
       state only.
     steps:
       - title: "List known addresses"
-        run: "./logos/bin/logoscore call blockchain_module wallet_get_known_addresses"
+        run: "./logos/bin/logosctl --config-dir ./session call blockchain_module wallet_get_known_addresses"
         code_block: |
-          logoscore call blockchain_module wallet_get_known_addresses
+          logosctl call blockchain_module wallet_get_known_addresses
         expect_contains:
           - '"success":true'
         post_text: |
@@ -256,10 +261,10 @@ sections:
           Feed one of those addresses straight back into `wallet_get_balance`.
           On a node that has not synced, the call **fails** — even though the
           address came from the module's own list a moment earlier:
-        run: "./logos/bin/logoscore call blockchain_module wallet_get_balance \"$(./logos/bin/logoscore call blockchain_module wallet_get_known_addresses | grep -o '[0-9a-f]\\{64\\}' | head -1)\""
+        run: "./logos/bin/logosctl --config-dir ./session call blockchain_module wallet_get_balance \"$(./logos/bin/logosctl --config-dir ./session call blockchain_module wallet_get_known_addresses | grep -o '[0-9a-f]\\{64\\}' | head -1)\""
         code_block: |
-          ADDR=$(logoscore call blockchain_module wallet_get_known_addresses | grep -o '[0-9a-f]\{64\}' | head -1)
-          logoscore call blockchain_module wallet_get_balance "$ADDR"
+          ADDR=$(logosctl call blockchain_module wallet_get_known_addresses | grep -o '[0-9a-f]\{64\}' | head -1)
+          logosctl call blockchain_module wallet_get_balance "$ADDR"
         expect_contains:
           - "Unknown wallet address."
         post_text: |
@@ -280,16 +285,16 @@ sections:
     text: "Shut the node down. `stop` is idempotent in the sense that stopping an already-stopped node reports plainly rather than failing hard."
     steps:
       - title: "Stop it"
-        run: "./logos/bin/logoscore call blockchain_module stop"
+        run: "./logos/bin/logosctl --config-dir ./session call blockchain_module stop"
         code_block: |
-          logoscore call blockchain_module stop
+          logosctl call blockchain_module stop
         expect_contains:
           - '"success":true'
 
       - title: "Confirm it is down"
-        run: "./logos/bin/logoscore call blockchain_module get_cryptarchia_info"
+        run: "./logos/bin/logosctl --config-dir ./session call blockchain_module get_cryptarchia_info"
         code_block: |
-          logoscore call blockchain_module get_cryptarchia_info
+          logosctl call blockchain_module get_cryptarchia_info
         expect_contains:
           - "The node is not running."
 
@@ -304,9 +309,9 @@ sections:
       The purge refuses while the node is running, which is why this comes after the stop.
     steps:
       - title: "Check for existing state"
-        run: "./logos/bin/logoscore call blockchain_module does_state_exist"
+        run: "./logos/bin/logosctl --config-dir ./session call blockchain_module does_state_exist"
         code_block: |
-          logoscore call blockchain_module does_state_exist
+          logosctl call blockchain_module does_state_exist
         expect_contains:
           - '"success":true'
           - 'value":true'
@@ -316,25 +321,25 @@ sections:
           Only `state` goes. 
           The generated config and the keystore stay, so the node keeps the identity it generated and simply resyncs on 
           the next start.
-        run: "./logos/bin/logoscore call blockchain_module purge_state"
+        run: "./logos/bin/logosctl --config-dir ./session call blockchain_module purge_state"
         code_block: |
-          logoscore call blockchain_module purge_state
+          logosctl call blockchain_module purge_state
         expect_contains:
           - '"success":true'
 
       - title: "Confirm it is gone"
-        run: "./logos/bin/logoscore call blockchain_module does_state_exist"
+        run: "./logos/bin/logosctl --config-dir ./session call blockchain_module does_state_exist"
         code_block: |
-          logoscore call blockchain_module does_state_exist
+          logosctl call blockchain_module does_state_exist
         expect_contains:
           - 'value":false'
         post_text: |
           The next start recreates the directory and syncs into it from genesis.
 
       - title: "Stop the daemon"
-        run: "./logos/bin/logoscore stop"
+        run: "./logos/bin/logosctl --config-dir ./session daemon stop"
         code_block: |
-          logoscore stop
+          logosctl daemon stop
 
   - title: "What this does not cover"
     text: |
