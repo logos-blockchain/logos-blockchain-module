@@ -10,7 +10,7 @@ intro: |
 
   The module generates that file for you through `generate_user_config`, so the
   operator never has to hand-write YAML. This doc-test drives that call through
-  the headless `logoscore` daemon and inspects what comes out, then shows what
+  the headless `logosctl` daemon and inspects what comes out, then shows what
   happens when you try to generate a second config into the same instance.
 
   > No node is started here — config generation is entirely local and needs no
@@ -20,8 +20,8 @@ intro: |
 what_you_build: "A generated `user_config.yaml` for a Logos blockchain node, produced through the module's `generate_user_config` call and inspected for the values that were asked for."
 
 what_you_learn:
-  - How a Logos module is packaged as `.lgx` and installed with `lgpm`
-  - How to call a module's methods headlessly through the `logoscore` daemon
+  - How a Logos module is packaged as `.lgx` and installed into a `logosctl` session
+  - How to call a module's methods headlessly through the `logosctl` daemon
   - What `generate_user_config` writes, and which knobs it accepts
   - Why a second generation into the same instance is refused, and what to use instead
   - Why the generated config's paths land under the module's own per-instance directory
@@ -36,35 +36,23 @@ sections:
     step: true
     text: |
       Build the Logos runtime CLI from its published flake. The result outputs a
-      binary named `logoscore` under a symlinked directory named `./logos`.
-      `logoscore` is the headless frontend for
+      binary named `logosctl` under a symlinked directory named `./logos`.
+      `logosctl` is the headless frontend for
       [`logos-liblogos`](https://github.com/logos-co/logos-liblogos) — it brings in
       the whole module-runtime stack we need to load and call the module.
     steps:
       - title: "Build the CLI"
-        run: "nix build 'github:logos-co/logos-logoscore-cli' --out-link ./logos"
+        run: "nix build 'github:logos-co/logos-logoscore-cli#ctl' --out-link ./logos"
         code_block: |
-          nix build 'github:logos-co/logos-logoscore-cli' --out-link ./logos
-        check_file: "logos/bin/logoscore"
+          nix build 'github:logos-co/logos-logoscore-cli#ctl' --out-link ./logos
+        check_file: "logos/bin/logosctl"
         post_text: |
-          The build produces `logos/bin/logoscore` plus bundled runtime libraries
+          The build produces `logos/bin/logosctl` plus bundled runtime libraries
           and a `logos/modules/` directory containing the built-in
           `capability_module` (required for the auth handshake when loading
           modules).
 
-  - title: "Build the lgpm package manager"
-    step: true
-    text: |
-      `lgpm` installs `.lgx` packages into a modules directory so the daemon can
-      discover them.
-    steps:
-      - title: "Build lgpm"
-        run: "nix build 'github:logos-co/logos-package-manager' --out-link ./lgpm"
-        code_block: |
-          nix build 'github:logos-co/logos-package-manager' --out-link ./lgpm
-        check_file: "lgpm/bin/lgpm"
-
-  - title: "Build and install the blockchain module"
+  - title: "Build the blockchain module"
     step: true
     text: |
       The module's flake exposes an `.lgx` package — the Logos distribution format.
@@ -76,42 +64,52 @@ sections:
         code_block: |
           nix build 'github:logos-blockchain/logos-blockchain-module{release}#lgx' --out-link ./blockchain-lgx
 
-      - title: "Install it into a modules directory"
-        text: "Install the package so the daemon can find it:"
-        run: "./lgpm/bin/lgpm --modules-dir ./modules install --dir ./blockchain-lgx"
-        code_block: |
-          lgpm --modules-dir ./modules install --dir ./blockchain-lgx
-        expect_contains:
-          - "blockchain_module"
-        check_file: "modules/blockchain_module/manifest.json"
-
-  - title: "Load the module in the daemon"
+  - title: "Install and load the module in the daemon"
     step: true
     text: |
-      Start the daemon pointed at the modules directory, then load
+      Start the daemon, install the package into its session, then load
       `blockchain_module`. Loading only brings the plugin into the process — it
       does **not** start a blockchain node.
     steps:
       - title: "Start the daemon"
-        run: "./logos/bin/logoscore stop >/dev/null 2>&1; sleep 2; ./logos/bin/logoscore daemon --modules-dir ./modules --persistence-path ./data >/dev/null 2>&1 &"
+        text: |
+          The session directory, `./session`, holds the daemon's config, its
+          installed modules and their data. `--detach` returns once the daemon
+          accepts commands.
+        # The bundled package downloader starts a storage node in $HOME; keep it
+        # out of the real one.
+        run: "mkdir -p home && HOME=\"$PWD/home\" ./logos/bin/logosctl --config-dir ./session daemon start --detach"
         code_block: |
-          logoscore daemon --modules-dir ./modules --persistence-path ./data
+          logosctl daemon start --detach
+        expect_contains:
+          - "Daemon started"
+
+      - title: "Install the module"
+        text: |
+          `--dir` installs every `.lgx` in a directory, with no catalog involved.
+          `-y` confirms, since there is no terminal to ask on.
+        run: "./logos/bin/logosctl --config-dir ./session install --dir ./blockchain-lgx -y"
+        code_block: |
+          logosctl install --dir ./blockchain-lgx -y
+        expect_contains:
+          - '"installed":["blockchain_module"]'
+        check_file: "session/modules/blockchain_module/manifest.json"
 
       - title: "Load the module"
-        run: "sleep 8; ./logos/bin/logoscore load-module blockchain_module"
+        run: "./logos/bin/logosctl --config-dir ./session module load blockchain_module"
         code_block: |
-          logoscore load-module blockchain_module
+          logosctl module load blockchain_module
         expect_contains:
           - "blockchain_module"
 
       - title: "Inspect the methods it exposes"
         text: |
-          `module-info` lists the `Q_INVOKABLE` methods — the same names you can
+          `module show` lists the `Q_INVOKABLE` methods — the same names you can
           `call`. Note `generate_user_config`, `start`, `stop`, and the
           `wallet_*` family:
-        run: "./logos/bin/logoscore module-info blockchain_module"
+        run: "./logos/bin/logosctl --config-dir ./session module show blockchain_module"
         code_block: |
-          logoscore module-info blockchain_module
+          logosctl module show blockchain_module
         expect_contains:
           - "generate_user_config"
           - "start"
@@ -144,9 +142,9 @@ sections:
             }
 
       - title: "Generate the config"
-        run: "./logos/bin/logoscore call blockchain_module generate_user_config @gen-args.json"
+        run: "./logos/bin/logosctl --config-dir ./session call blockchain_module generate_user_config @gen-args.json"
         code_block: |
-          logoscore call blockchain_module generate_user_config @gen-args.json
+          logosctl call blockchain_module generate_user_config @gen-args.json
         expect_contains:
           - '"success":true'
           - "user_config.yaml"
@@ -183,9 +181,9 @@ sections:
             }
 
       - title: "Try to generate a second config"
-        run: "./logos/bin/logoscore call blockchain_module generate_user_config @gen-args-solo.json"
+        run: "./logos/bin/logosctl --config-dir ./session call blockchain_module generate_user_config @gen-args-solo.json"
         code_block: |
-          logoscore call blockchain_module generate_user_config @gen-args-solo.json
+          logosctl call blockchain_module generate_user_config @gen-args-solo.json
         expect_contains:
           - "Keystore file exists. Use `update` command."
         post_text: |
@@ -204,6 +202,6 @@ sections:
     text: "Stop the daemon. No node was ever started, so there is nothing else to clean up."
     steps:
       - title: "Stop the daemon"
-        run: "./logos/bin/logoscore stop"
+        run: "./logos/bin/logosctl --config-dir ./session daemon stop"
         code_block: |
-          logoscore stop
+          logosctl daemon stop
