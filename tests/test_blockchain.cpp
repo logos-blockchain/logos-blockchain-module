@@ -495,6 +495,15 @@ LOGOS_TEST(blend_rewards_without_node_returns_error) {
     LOGOS_ASSERT_FALSE(t.cFunctionCalled("blend_rewards"));
 }
 
+LOGOS_TEST(blend_status_without_node_returns_error) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+    StdLogosResult result = module.blend_status();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
+    LOGOS_ASSERT_FALSE(t.cFunctionCalled("blend_status"));
+}
+
 LOGOS_TEST(get_chain_id_without_node_returns_error) {
     auto t = LogosTestContext("blockchain_module");
     LogosBlockchainModule module;
@@ -1724,11 +1733,10 @@ LOGOS_TEST(blend_rewards_returns_estimate) {
     for (int i = 0; i < 32; ++i) reward_key += "cc";
     LOGOS_ASSERT_TRUE(contains(json, "\"reward_key\":\"" + reward_key + "\""));
     LOGOS_ASSERT_TRUE(contains(json, "\"activity_epoch\":4"));
-    LOGOS_ASSERT_TRUE(contains(json, "\"pool_so_far\":\"1500\""));
-    LOGOS_ASSERT_TRUE(contains(json, "\"network_size\":5"));
-    LOGOS_ASSERT_TRUE(contains(json, "\"proofs_submitted\":4"));
-    LOGOS_ASSERT_TRUE(contains(json, "\"my_proof_submitted\":true"));
-    LOGOS_ASSERT_TRUE(contains(json, "\"premium\":true"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"pool\":\"1500\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"network\":{\"proofs\":4,\"size\":5}"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"did_submit_proof\":true"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"is_premium\":true"));
     LOGOS_ASSERT_TRUE(contains(json, "\"estimated_reward\":\"600\""));
     delete module;
 }
@@ -1756,6 +1764,71 @@ LOGOS_TEST(blend_rewards_returns_error_on_ffi_failure) {
     t.mockCFunction("blend_rewards_error").returns(1);
 
     StdLogosResult result = module->blend_rewards();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "mock error"));
+    delete module;
+}
+
+LOGOS_TEST(blend_status_reports_a_core_node) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("blend_status_error").returns(0);
+    t.mockCFunction("blend_status_is_core").returns(1);
+    t.mockCFunction("blend_status_declaration_state").returns(static_cast<int>(DeclarationState_Active));
+
+    StdLogosResult result = module->blend_status();
+    LOGOS_ASSERT_TRUE(result.success);
+    std::string json = result.value.get<std::string>();
+    std::string declaration_id;
+    for (int i = 0; i < 32; ++i) declaration_id += "d0";
+    LOGOS_ASSERT_TRUE(contains(json, "\"is_core\":true"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"declaration_state\":\"active\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"current_epoch\":9"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"id\":\"" + declaration_id + "\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"created_epoch\":5"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"first_epoch_in_snapshot\":7"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"withdraw_at\":null"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"activity_epoch\":8"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"proof_state\":\"failed\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"proof_reason\":\"mempool_rejected\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"last_active_epoch\":7"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"tokens_collected_in_current_epoch\":12"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"session_peers\":{\"healthy\":3,\"total\":4}"));
+    delete module;
+}
+
+LOGOS_TEST(blend_status_reports_an_undeclared_edge_node) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("blend_status_error").returns(0);
+
+    StdLogosResult result = module->blend_status();
+    LOGOS_ASSERT_TRUE(result.success);
+    std::string json = result.value.get<std::string>();
+    LOGOS_ASSERT_TRUE(contains(json, "\"is_core\":false"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"declaration_state\":\"not_declared\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"declaration\":null"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"activity\":null"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"tokens_collected_in_current_epoch\":null"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"session_peers\":null"));
+    delete module;
+}
+
+LOGOS_TEST(blend_status_returns_error_on_ffi_failure) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("blend_status_error").returns(1);
+
+    StdLogosResult result = module->blend_status();
     LOGOS_ASSERT_FALSE(result.success);
     LOGOS_ASSERT_TRUE(contains(result.error, "mock error"));
     delete module;

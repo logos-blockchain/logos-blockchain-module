@@ -35,6 +35,7 @@ module blockchain_module {
   method blend_requirements() -> result
   method blend_withdraw() -> result
   method blend_rewards() -> result
+  method blend_status() -> result
   method get_chain_id() -> result
   method collectOpenMetricsText() -> tstr
   method get_network_info() -> result

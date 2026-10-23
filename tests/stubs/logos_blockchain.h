@@ -228,12 +228,16 @@ typedef struct {
 
 // A node's estimated Blend reward for the activity epoch, based on the proofs submitted so far.
 typedef struct {
+    uint64_t size;
+    uint64_t proofs;
+} BlendNetwork;
+
+typedef struct {
     uint32_t activity_epoch;
-    uint64_t pool_so_far;
-    uint64_t network_size;
-    uint64_t proofs_submitted;
-    bool my_proof_submitted;
-    bool premium;
+    uint64_t pool;
+    BlendNetwork network;
+    bool did_submit_proof;
+    bool is_premium;
     uint64_t estimated_reward;
 } BlendRewardEstimate;
 
@@ -247,6 +251,79 @@ typedef struct {
     uint8_t reward_key[32];
     FfiOption_BlendRewardEstimate estimate;
 } BlendRewards;
+
+// Blend status enums. DeclarationState and ProofState are prefixed with their name, as both have a Pending.
+typedef enum {
+    DeclarationState_NotDeclared,
+    DeclarationState_Pending,
+    DeclarationState_Activating,
+    DeclarationState_Active,
+    DeclarationState_Inactive,
+    DeclarationState_Withdrawn,
+} DeclarationState;
+
+typedef enum {
+    ProofState_Pending,
+    ProofState_Accepted,
+    ProofState_Failed,
+    ProofState_NotRequired,
+} ProofState;
+
+typedef enum {
+    NoProof,
+    DeclarationNotFound,
+    TransactionBuildFailed,
+    MempoolRejected,
+    FirstEpoch,
+    NetworkBelowMinimum,
+    NotInActivityEpoch,
+} ProofReason;
+
+typedef struct { uint8_t _0[32]; } DeclarationId;
+typedef struct { bool is_some; uint32_t value; } FfiOption_u32;
+typedef struct { bool is_some; uintptr_t value; } FfiOption_usize;
+typedef struct { bool is_some; ProofReason value; } FfiOption_ProofReason;
+
+// The node's Blend declaration in the ledger.
+typedef struct {
+    DeclarationId id;
+    uint8_t provider_id[32];
+    uint8_t zk_id[32];
+    uint8_t locked_note_id[32];
+    uint32_t created_epoch;
+    uint32_t first_epoch_in_snapshot;
+    FfiOption_u32 withdraw_at;
+} DeclarationStatus;
+
+typedef struct { bool is_some; DeclarationStatus value; } FfiOption_DeclarationStatus;
+
+// The node's Blend activity proof for the activity epoch.
+typedef struct {
+    FfiOption_u32 activity_epoch;
+    ProofState proof_state;
+    FfiOption_ProofReason proof_reason;
+    uint32_t last_active_epoch;
+} ActivityStatus;
+
+typedef struct { bool is_some; ActivityStatus value; } FfiOption_ActivityStatus;
+
+typedef struct {
+    uintptr_t total;
+    uintptr_t healthy;
+} SessionPeers;
+
+typedef struct { bool is_some; SessionPeers value; } FfiOption_SessionPeers;
+
+// The node's Blend status.
+typedef struct {
+    bool is_core;
+    DeclarationState declaration_state;
+    uint32_t current_epoch;
+    FfiOption_DeclarationStatus declaration;
+    FfiOption_ActivityStatus activity;
+    FfiOption_usize tokens_collected_in_current_epoch;
+    FfiOption_SessionPeers session_peers;
+} BlendStatus;
 
 // libp2p connectivity counters (plain values, no free call needed)
 typedef struct {
@@ -271,6 +348,7 @@ typedef struct { char* value; OperationStatus error; } StringResult;
 typedef struct { BlendRequirements value; OperationStatus error; } FfiBlendRequirementsResult;
 typedef struct { BlendWithdrawal value; OperationStatus error; } FfiStatusResult_BlendWithdrawal;
 typedef struct { BlendRewards value; OperationStatus error; } FfiBlendRewardsResult;
+typedef struct { BlendStatus value; OperationStatus error; } FfiBlendStatusResult;
 typedef struct { CryptarchiaInfo* value; OperationStatus error; } CryptarchiaInfoResult;
 typedef struct { TimeInfo* value; OperationStatus error; } TimeInfoResult;
 typedef struct { Hash value; OperationStatus error; } SubmitTransactionResult;
@@ -375,6 +453,7 @@ StringResult blend_info(LogosBlockchainNode* node);
 FfiBlendRequirementsResult blend_requirements(const LogosBlockchainNode* node);
 FfiStatusResult_BlendWithdrawal blend_withdraw(const LogosBlockchainNode* node);
 FfiBlendRewardsResult blend_rewards(const LogosBlockchainNode* node);
+FfiBlendStatusResult blend_status(const LogosBlockchainNode* node);
 
 // Chain
 FfiGetChainIdResult get_chain_id(const LogosBlockchainNode* node);

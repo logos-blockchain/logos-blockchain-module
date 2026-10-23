@@ -357,12 +357,54 @@ FfiBlendRewardsResult blend_rewards(const LogosBlockchainNode* node) {
     if (v.estimate) {
         r.value.estimate.is_some = true;
         r.value.estimate.value.activity_epoch = v.estimate->activityEpoch;
-        r.value.estimate.value.pool_so_far = v.estimate->pool;
-        r.value.estimate.value.network_size = v.estimate->networkSize;
-        r.value.estimate.value.proofs_submitted = v.estimate->proofs;
-        r.value.estimate.value.my_proof_submitted = v.estimate->didSubmitProof;
-        r.value.estimate.value.premium = v.estimate->isPremium;
+        r.value.estimate.value.pool = v.estimate->pool;
+        r.value.estimate.value.network.size = v.estimate->networkSize;
+        r.value.estimate.value.network.proofs = v.estimate->proofs;
+        r.value.estimate.value.did_submit_proof = v.estimate->didSubmitProof;
+        r.value.estimate.value.is_premium = v.estimate->isPremium;
         r.value.estimate.value.estimated_reward = v.estimate->estimatedReward;
+    }
+    r.error = ok();
+    return r;
+}
+
+FfiBlendStatusResult blend_status(const LogosBlockchainNode* node) {
+    NODE_OR_RETURN(FfiBlendStatusResult)
+    Error err;
+    const lbmock::BlendStatusView v = n->blendStatus(err);
+    FfiBlendStatusResult r{};
+    if (err) {
+        r.error = status(err);
+        return r;
+    }
+    r.value.is_core = v.isCore;
+    r.value.declaration_state = static_cast<DeclarationState>(v.declarationState);
+    r.value.current_epoch = v.currentEpoch;
+    if (v.declaration) {
+        DeclarationStatus& d = r.value.declaration.value;
+        r.value.declaration.is_some = true;
+        std::memcpy(d.id._0, v.declaration->id.data(), 32);
+        std::memcpy(d.provider_id, v.declaration->providerId.data(), 32);
+        std::memcpy(d.zk_id, v.declaration->zkId.data(), 32);
+        std::memcpy(d.locked_note_id, v.declaration->noteId.data(), 32);
+        d.created_epoch = v.declaration->created;
+        d.first_epoch_in_snapshot = v.declaration->firstEpochInSnapshot;
+        if (v.declaration->withdrawAt)
+            d.withdraw_at = {true, *v.declaration->withdrawAt};
+    }
+    if (v.activity) {
+        ActivityStatus& a = r.value.activity.value;
+        r.value.activity.is_some = true;
+        if (v.activity->activityEpoch)
+            a.activity_epoch = {true, *v.activity->activityEpoch};
+        a.proof_state = static_cast<ProofState>(v.activity->proofState);
+        if (v.activity->proofReason)
+            a.proof_reason = {true, static_cast<ProofReason>(*v.activity->proofReason)};
+        a.last_active_epoch = v.activity->lastActiveEpoch;
+    }
+    if (v.isCore) {
+        r.value.tokens_collected_in_current_epoch = {true, v.tokensCollected};
+        r.value.session_peers = {true, {v.sessionPeers, v.healthySessionPeers}};
     }
     r.error = ok();
     return r;
