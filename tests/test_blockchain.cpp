@@ -468,6 +468,15 @@ LOGOS_TEST(blend_info_without_node_returns_error) {
     LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
 }
 
+LOGOS_TEST(blend_requirements_without_node_returns_error) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+    StdLogosResult result = module.blend_requirements();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
+    LOGOS_ASSERT_FALSE(t.cFunctionCalled("blend_requirements"));
+}
+
 LOGOS_TEST(get_chain_id_without_node_returns_error) {
     auto t = LogosTestContext("blockchain_module");
     LogosBlockchainModule module;
@@ -1608,6 +1617,40 @@ LOGOS_TEST(blend_info_returns_error_on_ffi_failure) {
     t.mockCFunction("blend_info_error").returns(1);
 
     StdLogosResult result = module->blend_info();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "mock error"));
+    delete module;
+}
+
+LOGOS_TEST(blend_requirements_returns_json_on_success) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("blend_requirements_error").returns(0);
+
+    StdLogosResult result = module->blend_requirements();
+    LOGOS_ASSERT_TRUE(result.success);
+    std::string json = result.value.get<std::string>();
+    LOGOS_ASSERT_TRUE(contains(json, "\"minimum_stake\":\"1000000000\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"declaration_activation_delay_epochs\":2"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"withdrawal_unlock_delay_epochs\":3"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"inactivity_timeout_epochs\":2"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"minimum_network_size_for_rewards\":32"));
+    LOGOS_ASSERT(t.cFunctionCalled("blend_requirements"));
+    delete module;
+}
+
+LOGOS_TEST(blend_requirements_returns_error_on_ffi_failure) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("blend_requirements_error").returns(1);
+
+    StdLogosResult result = module->blend_requirements();
     LOGOS_ASSERT_FALSE(result.success);
     LOGOS_ASSERT_TRUE(contains(result.error, "mock error"));
     delete module;

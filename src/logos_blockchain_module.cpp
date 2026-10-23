@@ -1724,6 +1724,26 @@ StdLogosResult LogosBlockchainModule::blend_info() const {
     return result::ok(std::move(out));
 }
 
+StdLogosResult LogosBlockchainModule::blend_requirements() const {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+
+    auto [value, error] = ::blend_requirements(node);
+    if (!is_ok(&error)) {
+        return result::err(operation_status::take_message(error));
+    }
+
+    json obj;
+    // Value is u64; serialized as a string to avoid JSON number precision loss.
+    obj["minimum_stake"] = std::to_string(value.minimum_stake);
+    obj["declaration_activation_delay_epochs"] = value.declaration_activation_delay_epochs;
+    obj["withdrawal_unlock_delay_epochs"] = value.withdrawal_unlock_delay_epochs;
+    obj["inactivity_timeout_epochs"] = value.inactivity_timeout_epochs;
+    obj["minimum_network_size_for_rewards"] = value.minimum_network_size_for_rewards;
+    return result::ok(obj.dump());
+}
+
 // Chain
 
 StdLogosResult LogosBlockchainModule::get_chain_id() const {

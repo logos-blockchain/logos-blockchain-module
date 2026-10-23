@@ -316,6 +316,19 @@ FfiBlendInfoResult blend_info(const LogosBlockchainNode* node) {
     return {ownedString(n->blendInfo()), ok()};
 }
 
+FfiBlendRequirementsResult blend_requirements(const LogosBlockchainNode* node) {
+    NODE_OR_RETURN(FfiBlendRequirementsResult)
+    const lbmock::BlendRequirementsView v = n->blendRequirements();
+    FfiBlendRequirementsResult r{};
+    r.value.minimum_stake = v.minimumStake;
+    r.value.declaration_activation_delay_epochs = v.activationDelayEpochs;
+    r.value.withdrawal_unlock_delay_epochs = v.withdrawalUnlockDelayEpochs;
+    r.value.inactivity_timeout_epochs = v.inactivityTimeoutEpochs;
+    r.value.minimum_network_size_for_rewards = v.minimumNetworkSize;
+    r.error = ok();
+    return r;
+}
+
 FfiStatusResult_DeclarationId blend_join_as_core_node(const LogosBlockchainNode* node, const char* locator,
                                                        const uint8_t* service_note_id) {
     NODE_OR_RETURN(FfiStatusResult_DeclarationId)

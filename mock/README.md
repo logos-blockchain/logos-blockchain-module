@@ -87,6 +87,8 @@ exact shapes and where each one comes from.
     header events and a note on the BlendZk key.
   - The locked stake note stays in `wallet_get_notes` and the balance, as on the
     real node.
+  - `blend_requirements` reads `min_stake`, `inactivity_period` and
+    `minimum_network_size` from the deployment.
 
 ## Knobs
 
