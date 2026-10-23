@@ -513,6 +513,89 @@ namespace {
             {"estimate", std::move(estimate)},
         };
     }
+
+    json declaration_state_name(const DeclarationState state) {
+        switch (state) {
+            case DeclarationState_NotDeclared: return "not_declared";
+            case DeclarationState_Pending: return "pending";
+            case DeclarationState_Activating: return "activating";
+            case DeclarationState_Active: return "active";
+            case DeclarationState_Inactive: return "inactive";
+            case DeclarationState_Withdrawn: return "withdrawn";
+        }
+        return nullptr;
+    }
+
+    json proof_state_name(const ProofState state) {
+        switch (state) {
+            case ProofState_Pending: return "pending";
+            case ProofState_Accepted: return "accepted";
+            case ProofState_Failed: return "failed";
+            case ProofState_NotRequired: return "not_required";
+        }
+        return nullptr;
+    }
+
+    json proof_reason_name(const ProofReason reason) {
+        switch (reason) {
+            case NoProof: return "no_proof";
+            case DeclarationNotFound: return "declaration_not_found";
+            case TransactionBuildFailed: return "transaction_build_failed";
+            case MempoolRejected: return "mempool_rejected";
+            case FirstEpoch: return "first_epoch";
+            case NetworkBelowMinimum: return "network_below_minimum";
+            case NotInActivityEpoch: return "not_in_activity_epoch";
+        }
+        return nullptr;
+    }
+
+    json optional_u32(const FfiOption_u32& option) {
+        return option.is_some ? json(option.value) : json(nullptr);
+    }
+
+    json blend_status_to_json(const BlendStatus& status) {
+        json obj;
+        obj["is_core"] = status.is_core;
+        obj["declaration_state"] = declaration_state_name(status.declaration_state);
+        obj["current_epoch"] = status.current_epoch;
+
+        obj["declaration"] = nullptr;
+        if (status.declaration.is_some) {
+            const DeclarationStatus& declaration = status.declaration.value;
+            obj["declaration"] = {
+                {"id", bytes_to_hex(declaration.id._0, sizeof(declaration.id._0))},
+                {"provider_id", bytes_to_hex(declaration.provider_id, ADDRESS_BYTES)},
+                {"zk_id", bytes_to_hex(declaration.zk_id, ADDRESS_BYTES)},
+                {"locked_note_id", bytes_to_hex(declaration.locked_note_id, ADDRESS_BYTES)},
+                {"created_epoch", declaration.created_epoch},
+                {"first_epoch_in_snapshot", declaration.first_epoch_in_snapshot},
+                {"withdraw_at", optional_u32(declaration.withdraw_at)},
+            };
+        }
+
+        obj["activity"] = nullptr;
+        if (status.activity.is_some) {
+            const ActivityStatus& activity = status.activity.value;
+            obj["activity"] = {
+                {"activity_epoch", optional_u32(activity.activity_epoch)},
+                {"proof_state", proof_state_name(activity.proof_state)},
+                {"proof_reason",
+                 activity.proof_reason.is_some ? proof_reason_name(activity.proof_reason.value) : json(nullptr)},
+                {"last_active_epoch", activity.last_active_epoch},
+            };
+        }
+
+        obj["tokens_collected_in_current_epoch"] = status.tokens_collected_in_current_epoch.is_some
+            ? json(static_cast<uint64_t>(status.tokens_collected_in_current_epoch.value))
+            : json(nullptr);
+        obj["session_peers"] = status.session_peers.is_some
+            ? json{
+                  {"total", static_cast<uint64_t>(status.session_peers.value.total)},
+                  {"healthy", static_cast<uint64_t>(status.session_peers.value.healthy)},
+              }
+            : json(nullptr);
+        return obj;
+    }
 } // namespace
 
 void LogosBlockchainModule::on_new_block_callback(const char* block) {
@@ -1801,47 +1884,6 @@ StdLogosResult LogosBlockchainModule::blend_rewards() const {
     return result::ok(blend_rewards_to_json(value).dump());
 }
 
-namespace {
-    json declaration_state_name(const DeclarationState state) {
-        switch (state) {
-            case DeclarationState_NotDeclared: return "not_declared";
-            case DeclarationState_Pending: return "pending";
-            case DeclarationState_Activating: return "activating";
-            case DeclarationState_Active: return "active";
-            case DeclarationState_Inactive: return "inactive";
-            case DeclarationState_Withdrawn: return "withdrawn";
-        }
-        return nullptr;
-    }
-
-    json proof_state_name(const ProofState state) {
-        switch (state) {
-            case ProofState_Pending: return "pending";
-            case ProofState_Accepted: return "accepted";
-            case ProofState_Failed: return "failed";
-            case ProofState_NotRequired: return "not_required";
-        }
-        return nullptr;
-    }
-
-    json proof_reason_name(const ProofReason reason) {
-        switch (reason) {
-            case NoProof: return "no_proof";
-            case DeclarationNotFound: return "declaration_not_found";
-            case TransactionBuildFailed: return "transaction_build_failed";
-            case MempoolRejected: return "mempool_rejected";
-            case FirstEpoch: return "first_epoch";
-            case NetworkBelowMinimum: return "network_below_minimum";
-            case NotInActivityEpoch: return "not_in_activity_epoch";
-        }
-        return nullptr;
-    }
-
-    json optional_u32(const FfiOption_u32& option) {
-        return option.is_some ? json(option.value) : json(nullptr);
-    }
-} // namespace
-
 StdLogosResult LogosBlockchainModule::blend_status() const {
     if (!node) {
         return result::err("The node is not running.");
@@ -1852,47 +1894,7 @@ StdLogosResult LogosBlockchainModule::blend_status() const {
         return result::err(operation_status::take_message(error));
     }
 
-    json obj;
-    obj["is_core"] = value.is_core;
-    obj["declaration_state"] = declaration_state_name(value.declaration_state);
-    obj["current_epoch"] = value.current_epoch;
-
-    obj["declaration"] = nullptr;
-    if (value.declaration.is_some) {
-        const DeclarationStatus& declaration = value.declaration.value;
-        obj["declaration"] = {
-            {"id", bytes_to_hex(declaration.id._0, sizeof(declaration.id._0))},
-            {"provider_id", bytes_to_hex(declaration.provider_id, ADDRESS_BYTES)},
-            {"zk_id", bytes_to_hex(declaration.zk_id, ADDRESS_BYTES)},
-            {"locked_note_id", bytes_to_hex(declaration.locked_note_id, ADDRESS_BYTES)},
-            {"created_epoch", declaration.created_epoch},
-            {"first_epoch_in_snapshot", declaration.first_epoch_in_snapshot},
-            {"withdraw_at", optional_u32(declaration.withdraw_at)},
-        };
-    }
-
-    obj["activity"] = nullptr;
-    if (value.activity.is_some) {
-        const ActivityStatus& activity = value.activity.value;
-        obj["activity"] = {
-            {"activity_epoch", optional_u32(activity.activity_epoch)},
-            {"proof_state", proof_state_name(activity.proof_state)},
-            {"proof_reason",
-             activity.proof_reason.is_some ? proof_reason_name(activity.proof_reason.value) : json(nullptr)},
-            {"last_active_epoch", activity.last_active_epoch},
-        };
-    }
-
-    obj["tokens_collected_in_current_epoch"] = value.tokens_collected_in_current_epoch.is_some
-        ? json(static_cast<uint64_t>(value.tokens_collected_in_current_epoch.value))
-        : json(nullptr);
-    obj["session_peers"] = value.session_peers.is_some
-        ? json{
-              {"total", static_cast<uint64_t>(value.session_peers.value.total)},
-              {"healthy", static_cast<uint64_t>(value.session_peers.value.healthy)},
-          }
-        : json(nullptr);
-    return result::ok(obj.dump());
+    return result::ok(blend_status_to_json(value).dump());
 }
 
 // Chain
