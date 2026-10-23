@@ -344,6 +344,30 @@ FfiStatusResult_BlendWithdrawal blend_withdraw(const LogosBlockchainNode* node) 
     return r;
 }
 
+FfiBlendRewardsResult blend_rewards(const LogosBlockchainNode* node) {
+    NODE_OR_RETURN(FfiBlendRewardsResult)
+    Error err;
+    const lbmock::BlendRewardsView v = n->blendRewards(err);
+    FfiBlendRewardsResult r{};
+    if (err) {
+        r.error = status(err);
+        return r;
+    }
+    std::memcpy(r.value.reward_key, v.rewardKey.data(), 32);
+    if (v.estimate) {
+        r.value.estimate.is_some = true;
+        r.value.estimate.value.activity_epoch = v.estimate->activityEpoch;
+        r.value.estimate.value.pool_so_far = v.estimate->pool;
+        r.value.estimate.value.network_size = v.estimate->networkSize;
+        r.value.estimate.value.proofs_submitted = v.estimate->proofs;
+        r.value.estimate.value.my_proof_submitted = v.estimate->didSubmitProof;
+        r.value.estimate.value.premium = v.estimate->isPremium;
+        r.value.estimate.value.estimated_reward = v.estimate->estimatedReward;
+    }
+    r.error = ok();
+    return r;
+}
+
 FfiStatusResult_DeclarationId blend_join_as_core_node(const LogosBlockchainNode* node, const char* locator,
                                                        const uint8_t* service_note_id) {
     NODE_OR_RETURN(FfiStatusResult_DeclarationId)

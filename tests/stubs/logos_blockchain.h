@@ -226,6 +226,28 @@ typedef struct {
     uint32_t unlocks_at_epoch;
 } BlendWithdrawal;
 
+// A node's estimated Blend reward for the activity epoch, based on the proofs submitted so far.
+typedef struct {
+    uint32_t activity_epoch;
+    uint64_t pool_so_far;
+    uint64_t network_size;
+    uint64_t proofs_submitted;
+    bool my_proof_submitted;
+    bool premium;
+    uint64_t estimated_reward;
+} BlendRewardEstimate;
+
+typedef struct {
+    bool is_some;
+    BlendRewardEstimate value;
+} FfiOption_BlendRewardEstimate;
+
+// A node's Blend rewards: the key they are minted to and the estimate, absent while no epoch is paid out.
+typedef struct {
+    uint8_t reward_key[32];
+    FfiOption_BlendRewardEstimate estimate;
+} BlendRewards;
+
 // libp2p connectivity counters (plain values, no free call needed)
 typedef struct {
     size_t n_peers;
@@ -248,6 +270,7 @@ typedef struct { Hash value; OperationStatus error; } BlendHashResult;
 typedef struct { char* value; OperationStatus error; } StringResult;
 typedef struct { BlendRequirements value; OperationStatus error; } FfiBlendRequirementsResult;
 typedef struct { BlendWithdrawal value; OperationStatus error; } FfiStatusResult_BlendWithdrawal;
+typedef struct { BlendRewards value; OperationStatus error; } FfiBlendRewardsResult;
 typedef struct { CryptarchiaInfo* value; OperationStatus error; } CryptarchiaInfoResult;
 typedef struct { TimeInfo* value; OperationStatus error; } TimeInfoResult;
 typedef struct { Hash value; OperationStatus error; } SubmitTransactionResult;
@@ -351,6 +374,7 @@ BlendHashResult blend_join_as_core_node(
 StringResult blend_info(LogosBlockchainNode* node);
 FfiBlendRequirementsResult blend_requirements(const LogosBlockchainNode* node);
 FfiStatusResult_BlendWithdrawal blend_withdraw(const LogosBlockchainNode* node);
+FfiBlendRewardsResult blend_rewards(const LogosBlockchainNode* node);
 
 // Chain
 FfiGetChainIdResult get_chain_id(const LogosBlockchainNode* node);

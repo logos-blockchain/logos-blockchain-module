@@ -195,6 +195,20 @@ struct BlendWithdrawalView {
     uint32_t unlocksAtEpoch = 0;
 };
 
+struct BlendRewardsView {
+    Bytes32 rewardKey{};
+    struct Estimate {
+        uint32_t activityEpoch = 0;
+        uint64_t pool = 0;
+        uint64_t networkSize = 0;
+        uint64_t proofs = 0;
+        bool didSubmitProof = false;
+        bool isPremium = false;
+        uint64_t estimatedReward = 0;
+    };
+    std::optional<Estimate> estimate;
+};
+
 struct CryptarchiaView {
     Bytes32 lib{};
     uint64_t libSlot = 0;
@@ -257,6 +271,7 @@ public:
     Bytes32 leaderClaim(Error& err);
     Bytes32 blendJoin(const std::string& locator, const Bytes32& noteId, Error& err);
     BlendWithdrawalView blendWithdraw(Error& err);
+    BlendRewardsView blendRewards(Error& err);
 
     void powSetMining(bool on);
     void powSetAutoClaim(bool on);

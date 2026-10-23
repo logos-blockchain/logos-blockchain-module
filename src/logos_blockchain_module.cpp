@@ -493,6 +493,27 @@ namespace {
             {"unlocks_at_epoch", withdrawal.unlocks_at_epoch},
         };
     }
+
+    json blend_rewards_to_json(const BlendRewards& rewards) {
+        json estimate = nullptr;
+        if (rewards.estimate.is_some) {
+            const BlendRewardEstimate& value = rewards.estimate.value;
+            // Values are u64; serialized as strings to avoid JSON number precision loss.
+            estimate = {
+                {"activity_epoch", value.activity_epoch},
+                {"pool_so_far", std::to_string(value.pool_so_far)},
+                {"network_size", value.network_size},
+                {"proofs_submitted", value.proofs_submitted},
+                {"my_proof_submitted", value.my_proof_submitted},
+                {"premium", value.premium},
+                {"estimated_reward", std::to_string(value.estimated_reward)},
+            };
+        }
+        return {
+            {"reward_key", bytes_to_hex(rewards.reward_key, ADDRESS_BYTES)},
+            {"estimate", std::move(estimate)},
+        };
+    }
 } // namespace
 
 void LogosBlockchainModule::on_new_block_callback(const char* block) {
@@ -1766,6 +1787,19 @@ StdLogosResult LogosBlockchainModule::blend_withdraw() const {
     }
 
     return result::ok(blend_withdrawal_to_json(value).dump());
+}
+
+StdLogosResult LogosBlockchainModule::blend_rewards() const {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+
+    auto [value, error] = ::blend_rewards(node);
+    if (!is_ok(&error)) {
+        return result::err(operation_status::take_message(error));
+    }
+
+    return result::ok(blend_rewards_to_json(value).dump());
 }
 
 // Chain
