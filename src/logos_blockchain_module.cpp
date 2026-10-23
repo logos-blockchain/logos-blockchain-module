@@ -475,6 +475,17 @@ namespace {
             yaml += "  auto_claim:\n" + auto_claim;
         return yaml;
     }
+
+    json blend_requirements_to_json(const BlendRequirements& requirements) {
+        // Value is u64; serialized as a string to avoid JSON number precision loss.
+        return {
+            {"minimum_stake", std::to_string(requirements.minimum_stake)},
+            {"declaration_activation_delay_epochs", requirements.declaration_activation_delay_epochs},
+            {"withdrawal_unlock_delay_epochs", requirements.withdrawal_unlock_delay_epochs},
+            {"inactivity_timeout_epochs", requirements.inactivity_timeout_epochs},
+            {"minimum_network_size_for_rewards", requirements.minimum_network_size_for_rewards},
+        };
+    }
 } // namespace
 
 void LogosBlockchainModule::on_new_block_callback(const char* block) {
@@ -1734,14 +1745,7 @@ StdLogosResult LogosBlockchainModule::blend_requirements() const {
         return result::err(operation_status::take_message(error));
     }
 
-    json obj;
-    // Value is u64; serialized as a string to avoid JSON number precision loss.
-    obj["minimum_stake"] = std::to_string(value.minimum_stake);
-    obj["declaration_activation_delay_epochs"] = value.declaration_activation_delay_epochs;
-    obj["withdrawal_unlock_delay_epochs"] = value.withdrawal_unlock_delay_epochs;
-    obj["inactivity_timeout_epochs"] = value.inactivity_timeout_epochs;
-    obj["minimum_network_size_for_rewards"] = value.minimum_network_size_for_rewards;
-    return result::ok(obj.dump());
+    return result::ok(blend_requirements_to_json(value).dump());
 }
 
 // Chain
