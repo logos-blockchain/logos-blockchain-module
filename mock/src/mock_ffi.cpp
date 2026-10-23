@@ -26,6 +26,11 @@ using lbmock::Bytes32;
 using lbmock::Error;
 using lbmock::Node;
 
+// The header only forward-declares the node handle, so the mock defines its own.
+struct LogosBlockchainNode {
+    Node* sim;
+};
+
 namespace {
 
 std::mutex g_allocMutex;
@@ -53,7 +58,7 @@ OperationStatus status(OperationStatusCode code, const std::string& message) {
 OperationStatus nullNode() { return status(NullPointer, "Received a null `node` pointer."); }
 
 Node* sim(const LogosBlockchainNode* node) {
-    return node ? static_cast<Node*>(node->overwatch) : nullptr;
+    return node ? node->sim : nullptr;
 }
 
 // A real FFI call from a stream callback runs block_on on a tokio worker
@@ -153,10 +158,7 @@ FfiInitializedLogosBlockchainNodeResult start_lb_node(const char* config_path, c
         r.error = status(err);
         return r;
     }
-    auto* handle = new LogosBlockchainNode{};
-    handle->chain_id = strdup(node->chainId().c_str());
-    handle->overwatch = node.release();
-    r.value = handle;
+    r.value = new LogosBlockchainNode{node.release()};
     r.error = ok();
     return r;
 }
@@ -168,24 +170,23 @@ OperationStatus shutdown_node(LogosBlockchainNode* node) {
     Node* n = sim(node);
     n->shutdown();
     delete n;
-    std::free(node->chain_id);
     delete node;
     return ok();
 }
 
-OperationStatus subscribe_to_new_blocks(const LogosBlockchainNode* node, CCallback______c_char cb) {
+OperationStatus subscribe_to_new_blocks(const LogosBlockchainNode* node, EventCallback cb) {
     guard(__func__);
     Node* n = sim(node);
     return n ? status(n->subscribe(lbmock::Stream::NewBlocks, cb)) : nullNode();
 }
 
-OperationStatus subscribe_to_processed_blocks(const LogosBlockchainNode* node, CCallback______c_char cb) {
+OperationStatus subscribe_to_processed_blocks(const LogosBlockchainNode* node, EventCallback cb) {
     guard(__func__);
     Node* n = sim(node);
     return n ? status(n->subscribe(lbmock::Stream::ProcessedBlocks, cb)) : nullNode();
 }
 
-OperationStatus subscribe_to_lib_blocks(const LogosBlockchainNode* node, CCallback______c_char cb) {
+OperationStatus subscribe_to_lib_blocks(const LogosBlockchainNode* node, EventCallback cb) {
     guard(__func__);
     Node* n = sim(node);
     return n ? status(n->subscribe(lbmock::Stream::LibBlocks, cb)) : nullNode();
