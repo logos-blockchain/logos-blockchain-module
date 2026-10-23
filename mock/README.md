@@ -91,6 +91,7 @@ exact shapes and where each one comes from.
     declaration in the ledger. A withdrawal landing in epoch E drops the node from
     the core set at E+2 and unlocks the stake note at E+3.
   - `blend_rewards` fails right away unless Online.
+  - `blend_status` fails right away unless Online.
 
 ## Knobs
 

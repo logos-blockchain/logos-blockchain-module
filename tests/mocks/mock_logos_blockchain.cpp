@@ -450,12 +450,45 @@ FfiBlendRewardsResult blend_rewards(const LogosBlockchainNode* node) {
         if (LOGOS_CMOCK_RETURN(int, "blend_rewards_has_estimate") != 0) {
             result.value.estimate.is_some = true;
             result.value.estimate.value.activity_epoch = 4;
-            result.value.estimate.value.pool_so_far = 1500;
-            result.value.estimate.value.network_size = 5;
-            result.value.estimate.value.proofs_submitted = 4;
-            result.value.estimate.value.my_proof_submitted = true;
-            result.value.estimate.value.premium = true;
+            result.value.estimate.value.pool = 1500;
+            result.value.estimate.value.network.size = 5;
+            result.value.estimate.value.network.proofs = 4;
+            result.value.estimate.value.did_submit_proof = true;
+            result.value.estimate.value.is_premium = true;
             result.value.estimate.value.estimated_reward = 600;
+        }
+    }
+    return result;
+}
+
+FfiBlendStatusResult blend_status(const LogosBlockchainNode* node) {
+    LOGOS_CMOCK_RECORD("blend_status");
+    FfiBlendStatusResult result;
+    int err = LOGOS_CMOCK_RETURN(int, "blend_status_error");
+    result.error = make_status(err);
+    result.value = BlendStatus{};
+    if (err == 0) {
+        result.value.current_epoch = 9;
+        result.value.declaration_state = static_cast<DeclarationState>(LOGOS_CMOCK_RETURN(int, "blend_status_declaration_state"));
+        // A non-zero flag makes the node an active core node, declared in epoch 5 and failing its proof for epoch 8.
+        if (LOGOS_CMOCK_RETURN(int, "blend_status_is_core") != 0) {
+            result.value.is_core = true;
+            DeclarationStatus& declaration = result.value.declaration.value;
+            result.value.declaration.is_some = true;
+            memset(declaration.id._0, 0xD0, sizeof(declaration.id._0));
+            memset(declaration.provider_id, 0xD1, sizeof(declaration.provider_id));
+            memset(declaration.zk_id, 0xD2, sizeof(declaration.zk_id));
+            memset(declaration.locked_note_id, 0xD3, sizeof(declaration.locked_note_id));
+            declaration.created_epoch = 5;
+            declaration.first_epoch_in_snapshot = 7;
+            ActivityStatus& activity = result.value.activity.value;
+            result.value.activity.is_some = true;
+            activity.activity_epoch = {true, 8};
+            activity.proof_state = ProofState_Failed;
+            activity.proof_reason = {true, ProofReason_MempoolRejected};
+            activity.last_active_epoch = 7;
+            result.value.tokens_collected_in_current_epoch = {true, 12};
+            result.value.session_peers = {true, {4, 3}};
         }
     }
     return result;

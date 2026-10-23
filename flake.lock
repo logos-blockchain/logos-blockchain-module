@@ -193,15 +193,15 @@
       },
       "locked": {
         "lastModified": 1792757349,
-        "narHash": "sha256-zSsVo+QcPrVSGbfPnkkgPyBXyTyJ0FXfJYIKReLaOpI=",
+        "narHash": "sha256-lZqN8jmzfW3pquR/aw7lDuRe0syKjg39WcRkIhW8M9U=",
         "owner": "logos-blockchain",
         "repo": "logos-blockchain",
-        "rev": "99b4a5b60136affa9de2df82e1116aafc721423f",
+        "rev": "9535870bfbbcd132070f88490ec7a54f42ad37ef",
         "type": "github"
       },
       "original": {
         "owner": "logos-blockchain",
-        "ref": "feat/c-bindings/blend-3-rewards",
+        "ref": "feat/c-bindings/blend-4-status",
         "repo": "logos-blockchain",
         "type": "github"
       }

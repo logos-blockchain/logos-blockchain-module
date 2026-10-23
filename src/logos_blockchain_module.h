@@ -213,9 +213,21 @@ public:
     [[nodiscard]] StdLogosResult blend_withdraw() const;
     // The node's estimated Blend reward for the epoch being paid out, based on the proofs submitted so far.
     // Fails if the node is not online or has no declaration in the ledger. Returns JSON:
-    //   { reward_key, estimate: null | { activity_epoch, pool_so_far, network_size, proofs_submitted,
-    //                                    my_proof_submitted, premium, estimated_reward } }
+    //   { reward_key, estimate: null | { activity_epoch, pool, network: { size, proofs },
+    //                                    did_submit_proof, is_premium, estimated_reward } }
     [[nodiscard]] StdLogosResult blend_rewards() const;
+    // The node's Blend status: core or edge, its declaration and its activity proof for the activity epoch.
+    // Fails if the node is not online. Returns JSON:
+    //   { is_core, declaration_state, current_epoch,
+    //     declaration: null | { id, provider_id, zk_id, locked_note_id, created_epoch, first_epoch_in_snapshot,
+    //                           withdraw_at },
+    //     activity: null | { activity_epoch, proof_state, proof_reason, last_active_epoch },
+    //     tokens_collected_in_current_epoch, session_peers: null | { total, healthy } }
+    // declaration_state: "not_declared" | "pending" | "activating" | "active" | "inactive" | "withdrawn"
+    // proof_state: "pending" | "accepted" | "failed" | "not_required"
+    // proof_reason: null | "no_proof" | "declaration_not_found" | "transaction_build_failed" | "mempool_rejected"
+    //               | "first_epoch" | "network_below_minimum" | "not_in_activity_epoch"
+    [[nodiscard]] StdLogosResult blend_status() const;
 
     // Chain
     // Chain ID of the deployment the running node was started with. Fixed for the node's lifetime.

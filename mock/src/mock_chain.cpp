@@ -1980,6 +1980,79 @@ BlendRewardsView Node::blendRewards(Error& err) {
     return v;
 }
 
+BlendStatusView Node::blendStatus(Error& err) {
+    std::lock_guard lock(m_mutex);
+    if (m_mode != Mode::Online) {
+        err = {kServiceError, "The node is not online yet."};
+        return {};
+    }
+    BlendStatusView v;
+    const uint64_t slot = m_chain[m_tip];
+    const uint32_t epoch = epochOf(slot);
+    const auto networkSize = [this](uint32_t e) { return m_params.genesisProviders.size() + (memberOf(e) ? 1 : 0); };
+    v.currentEpoch = epoch;
+    v.isCore = memberOf(epoch) && networkSize(epoch) >= m_params.minimumNetworkSize;
+    if (v.isCore) {
+        // Same peers as blendInfo's core_info.
+        for (size_t i = 0; i < m_params.genesisProviders.size() && i < 4; ++i) {
+            ++v.sessionPeers;
+            if (m_params.blendReachable || unit(m_params.seed, 21, epoch, i) < 0.5)
+                ++v.healthySessionPeers;
+        }
+        v.tokensCollected = (slot % m_params.epochSlots) / 10;
+    }
+
+    if (!m_declaration) {
+        v.declarationState = m_cfg.sdpDeclarationId ? DeclarationState::Pending : DeclarationState::NotDeclared;
+        return v;
+    }
+    const Declaration& d = *m_declaration;
+    const uint32_t firstEpochInSnapshot = d.created + 2;
+    v.declaration = BlendStatusView::Declaration{d.id, d.providerId, d.zkId, d.noteId, d.created,
+                                                 firstEpochInSnapshot, d.withdrawAt};
+    if (d.withdrawalPosted)
+        v.declarationState = DeclarationState::Withdrawn;
+    else if (epoch < firstEpochInSnapshot)
+        v.declarationState = DeclarationState::Activating;
+    else
+        v.declarationState = memberOf(epoch) ? DeclarationState::Active : DeclarationState::Inactive;
+    if (epoch < firstEpochInSnapshot)
+        return v;
+
+    BlendStatusView::Activity a;
+    a.lastActiveEpoch = d.active;
+    if (epoch == 0) {
+        a.proofState = ProofState::NotRequired;
+        a.proofReason = ProofReason::FirstEpoch;
+    } else {
+        const uint32_t activity = epoch - 1;
+        a.activityEpoch = activity;
+        const auto posted = [&](const PendingTx& tx) {
+            for (const auto& op : tx.ops)
+                if (op.value("opcode", -1) == 34 &&
+                    op["payload"]["metadata"]["Blend"].value("epoch", UINT32_MAX) == activity)
+                    return true;
+            return false;
+        };
+        if (!memberOf(activity)) {
+            a.proofState = ProofState::NotRequired;
+            a.proofReason = ProofReason::NotInActivityEpoch;
+        } else if (networkSize(activity) < m_params.minimumNetworkSize) {
+            a.proofState = ProofState::NotRequired;
+            a.proofReason = ProofReason::NetworkBelowMinimum;
+        } else if (m_activityAccepted.count(activity)) {
+            a.proofState = ProofState::Accepted;
+        } else if (std::any_of(m_mempool.begin(), m_mempool.end(), posted)) {
+            a.proofState = ProofState::Pending;
+        } else {
+            a.proofState = ProofState::Failed;
+            a.proofReason = ProofReason::NoProof;
+        }
+    }
+    v.activity = a;
+    return v;
+}
+
 // ==== PoW ====================================================================
 
 void Node::powSetMining(bool on) {

@@ -209,6 +209,45 @@ struct BlendRewardsView {
     std::optional<Estimate> estimate;
 };
 
+// Same order as the C header's DeclarationState, ProofState and ProofReason.
+enum class DeclarationState { NotDeclared, Pending, Activating, Active, Inactive, Withdrawn };
+enum class ProofState { Pending, Accepted, Failed, NotRequired };
+enum class ProofReason {
+    NoProof,
+    DeclarationNotFound,
+    TransactionBuildFailed,
+    MempoolRejected,
+    FirstEpoch,
+    NetworkBelowMinimum,
+    NotInActivityEpoch,
+};
+
+struct BlendStatusView {
+    bool isCore = false;
+    DeclarationState declarationState = DeclarationState::NotDeclared;
+    uint32_t currentEpoch = 0;
+    struct Declaration {
+        Bytes32 id{};
+        Bytes32 providerId{};
+        Bytes32 zkId{};
+        Bytes32 noteId{};
+        uint32_t created = 0;
+        uint32_t firstEpochInSnapshot = 0;
+        std::optional<uint32_t> withdrawAt;
+    };
+    std::optional<Declaration> declaration;
+    struct Activity {
+        std::optional<uint32_t> activityEpoch;
+        ProofState proofState = ProofState::Pending;
+        std::optional<ProofReason> proofReason;
+        uint32_t lastActiveEpoch = 0;
+    };
+    std::optional<Activity> activity;
+    size_t tokensCollected = 0;
+    size_t sessionPeers = 0;
+    size_t healthySessionPeers = 0;
+};
+
 struct CryptarchiaView {
     Bytes32 lib{};
     uint64_t libSlot = 0;
@@ -272,6 +311,7 @@ public:
     Bytes32 blendJoin(const std::string& locator, const Bytes32& noteId, Error& err);
     BlendWithdrawalView blendWithdraw(Error& err);
     BlendRewardsView blendRewards(Error& err);
+    BlendStatusView blendStatus(Error& err);
 
     void powSetMining(bool on);
     void powSetAutoClaim(bool on);
