@@ -211,6 +211,15 @@ typedef struct {
     uint32_t current_epoch;
 } TimeInfo;
 
+// What a node needs to take part in Blend.
+typedef struct {
+    uint64_t minimum_stake;
+    uint32_t declaration_activation_delay_epochs;
+    uint32_t withdrawal_unlock_delay_epochs;
+    uint32_t inactivity_timeout_epochs;
+    uint64_t minimum_network_size_for_rewards;
+} BlendRequirements;
+
 // libp2p connectivity counters (plain values, no free call needed)
 typedef struct {
     size_t n_peers;
@@ -231,6 +240,7 @@ typedef struct { LeaderAgedNotes value; OperationStatus error; } FfiLeaderAgedNo
 typedef struct { ClaimableVouchers value; OperationStatus error; } FfiClaimableVouchersResult;
 typedef struct { Hash value; OperationStatus error; } BlendHashResult;
 typedef struct { char* value; OperationStatus error; } StringResult;
+typedef struct { BlendRequirements value; OperationStatus error; } FfiBlendRequirementsResult;
 typedef struct { CryptarchiaInfo* value; OperationStatus error; } CryptarchiaInfoResult;
 typedef struct { TimeInfo* value; OperationStatus error; } TimeInfoResult;
 typedef struct { Hash value; OperationStatus error; } SubmitTransactionResult;
@@ -332,6 +342,7 @@ BlendHashResult blend_join_as_core_node(
     const char* locator,
     const uint8_t* locked_note_id);
 StringResult blend_info(LogosBlockchainNode* node);
+FfiBlendRequirementsResult blend_requirements(const LogosBlockchainNode* node);
 
 // Chain
 FfiGetChainIdResult get_chain_id(const LogosBlockchainNode* node);

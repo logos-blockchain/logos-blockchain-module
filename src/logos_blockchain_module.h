@@ -204,6 +204,10 @@ public:
         const std::string& locked_note_id_hex
     ) const;
     [[nodiscard]] StdLogosResult blend_info() const;
+    // What a node needs to take part in Blend, under the era active at the current epoch, as JSON:
+    //   { minimum_stake, declaration_activation_delay_epochs, withdrawal_unlock_delay_epochs,
+    //     inactivity_timeout_epochs, minimum_network_size_for_rewards }
+    [[nodiscard]] StdLogosResult blend_requirements() const;
 
     // Chain
     // Chain ID of the deployment the running node was started with. Fixed for the node's lifetime.

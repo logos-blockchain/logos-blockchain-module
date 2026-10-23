@@ -475,6 +475,17 @@ namespace {
             yaml += "  auto_claim:\n" + auto_claim;
         return yaml;
     }
+
+    json blend_requirements_to_json(const BlendRequirements& requirements) {
+        // Value is u64; serialized as a string to avoid JSON number precision loss.
+        return {
+            {"minimum_stake", std::to_string(requirements.minimum_stake)},
+            {"declaration_activation_delay_epochs", requirements.declaration_activation_delay_epochs},
+            {"withdrawal_unlock_delay_epochs", requirements.withdrawal_unlock_delay_epochs},
+            {"inactivity_timeout_epochs", requirements.inactivity_timeout_epochs},
+            {"minimum_network_size_for_rewards", requirements.minimum_network_size_for_rewards},
+        };
+    }
 } // namespace
 
 void LogosBlockchainModule::on_new_block_callback(const char* block) {
@@ -1722,6 +1733,19 @@ StdLogosResult LogosBlockchainModule::blend_info() const {
         fprintf(stderr, "Failed to free blend info string: %s\n", operation_status::take_message(free_status).c_str());
     }
     return result::ok(std::move(out));
+}
+
+StdLogosResult LogosBlockchainModule::blend_requirements() const {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+
+    auto [value, error] = ::blend_requirements(node);
+    if (!is_ok(&error)) {
+        return result::err(operation_status::take_message(error));
+    }
+
+    return result::ok(blend_requirements_to_json(value).dump());
 }
 
 // Chain

@@ -180,6 +180,14 @@ struct PowStatusView {
     std::vector<Target> targets;
 };
 
+struct BlendRequirementsView {
+    uint64_t minimumStake = 0;
+    uint32_t activationDelayEpochs = 0;
+    uint32_t withdrawalUnlockDelayEpochs = 0;
+    uint32_t inactivityTimeoutEpochs = 0;
+    uint64_t minimumNetworkSize = 0;
+};
+
 struct CryptarchiaView {
     Bytes32 lib{};
     uint64_t libSlot = 0;
@@ -222,6 +230,7 @@ public:
     std::optional<std::string> blockEvents(const Bytes32& id);
     std::optional<std::string> channelState(const Bytes32& id);
     std::string blendInfo();
+    BlendRequirementsView blendRequirements() const;
 
     std::vector<Bytes32> knownAddresses();
     std::optional<uint64_t> balance(const Bytes32& pk, const Bytes32* tip, Error& err);

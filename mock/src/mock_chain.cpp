@@ -1450,6 +1450,11 @@ std::string Node::blendInfo() {
     return info.dump();
 }
 
+// A declaration from epoch E joins the core set at E+2, and its note unlocks one epoch after a withdrawal.
+BlendRequirementsView Node::blendRequirements() const {
+    return {m_params.minStake, 2, 3, m_params.inactivityPeriod, m_params.minimumNetworkSize};
+}
+
 std::vector<Bytes32> Node::knownAddresses() {
     std::lock_guard lock(m_mutex);
     return m_cfg.knownKeys;

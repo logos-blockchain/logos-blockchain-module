@@ -409,6 +409,22 @@ StringResult blend_info(LogosBlockchainNode* node) {
     return result;
 }
 
+FfiBlendRequirementsResult blend_requirements(const LogosBlockchainNode* node) {
+    LOGOS_CMOCK_RECORD("blend_requirements");
+    FfiBlendRequirementsResult result;
+    int err = LOGOS_CMOCK_RETURN(int, "blend_requirements_error");
+    result.error = make_status(err);
+    result.value = BlendRequirements{};
+    if (err == 0) {
+        result.value.minimum_stake = 1000000000;
+        result.value.declaration_activation_delay_epochs = 2;
+        result.value.withdrawal_unlock_delay_epochs = 3;
+        result.value.inactivity_timeout_epochs = 2;
+        result.value.minimum_network_size_for_rewards = 32;
+    }
+    return result;
+}
+
 FfiGetChainIdResult get_chain_id(const LogosBlockchainNode* node) {
     LOGOS_CMOCK_RECORD("get_chain_id");
     FfiGetChainIdResult result;
