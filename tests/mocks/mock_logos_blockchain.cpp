@@ -425,6 +425,19 @@ FfiBlendRequirementsResult blend_requirements(const LogosBlockchainNode* node) {
     return result;
 }
 
+FfiStatusResult_BlendWithdrawal blend_withdraw(const LogosBlockchainNode* node) {
+    LOGOS_CMOCK_RECORD("blend_withdraw");
+    FfiStatusResult_BlendWithdrawal result;
+    int err = LOGOS_CMOCK_RETURN(int, "blend_withdraw_error");
+    result.error = make_status(err);
+    result.value = BlendWithdrawal{};
+    if (err == 0) {
+        memset(result.value.tx_hash, 0xBB, sizeof(result.value.tx_hash));
+        result.value.unlocks_at_epoch = static_cast<uint32_t>(LOGOS_CMOCK_RETURN(int, "blend_withdraw_unlocks_at_epoch"));
+    }
+    return result;
+}
+
 FfiGetChainIdResult get_chain_id(const LogosBlockchainNode* node) {
     LOGOS_CMOCK_RECORD("get_chain_id");
     FfiGetChainIdResult result;

@@ -486,6 +486,13 @@ namespace {
             {"minimum_network_size_for_rewards", requirements.minimum_network_size_for_rewards},
         };
     }
+
+    json blend_withdrawal_to_json(const BlendWithdrawal& withdrawal) {
+        return {
+            {"tx_hash", bytes_to_hex(withdrawal.tx_hash, TX_HASH_BYTES)},
+            {"unlocks_at_epoch", withdrawal.unlocks_at_epoch},
+        };
+    }
 } // namespace
 
 void LogosBlockchainModule::on_new_block_callback(const char* block) {
@@ -1746,6 +1753,19 @@ StdLogosResult LogosBlockchainModule::blend_requirements() const {
     }
 
     return result::ok(blend_requirements_to_json(value).dump());
+}
+
+StdLogosResult LogosBlockchainModule::blend_withdraw() const {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+
+    auto [value, error] = ::blend_withdraw(node);
+    if (!is_ok(&error)) {
+        return result::err(operation_status::take_message(error));
+    }
+
+    return result::ok(blend_withdrawal_to_json(value).dump());
 }
 
 // Chain

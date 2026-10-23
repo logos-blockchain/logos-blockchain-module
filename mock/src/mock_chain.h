@@ -145,6 +145,8 @@ struct Declaration {
     uint32_t created = 0;
     uint32_t active = 0;
     uint64_t nonce = 0;
+    bool withdrawalPosted = false;
+    std::optional<uint32_t> withdrawAt; // set once the withdrawal lands
 };
 
 struct PendingTx {
@@ -186,6 +188,11 @@ struct BlendRequirementsView {
     uint32_t withdrawalUnlockDelayEpochs = 0;
     uint32_t inactivityTimeoutEpochs = 0;
     uint64_t minimumNetworkSize = 0;
+};
+
+struct BlendWithdrawalView {
+    Bytes32 txHash{};
+    uint32_t unlocksAtEpoch = 0;
 };
 
 struct CryptarchiaView {
@@ -249,6 +256,7 @@ public:
     Bytes32 submitSigned(const std::string& signedTx, Error& err);
     Bytes32 leaderClaim(Error& err);
     Bytes32 blendJoin(const std::string& locator, const Bytes32& noteId, Error& err);
+    BlendWithdrawalView blendWithdraw(Error& err);
 
     void powSetMining(bool on);
     void powSetAutoClaim(bool on);
