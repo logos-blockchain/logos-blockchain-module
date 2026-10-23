@@ -52,8 +52,9 @@ OperationStatus status(OperationStatusCode code, const std::string& message) {
 
 OperationStatus nullNode() { return status(NullPointer, "Received a null `node` pointer."); }
 
-Node* sim(const LogosBlockchainNode* node) {
-    return node ? static_cast<Node*>(node->overwatch) : nullptr;
+// The handle is opaque to callers, so the mock hands out the simulated node itself.
+Node* simulatedNode(const LogosBlockchainNode* node) {
+    return reinterpret_cast<Node*>(const_cast<LogosBlockchainNode*>(node));
 }
 
 // A real FFI call from a stream callback runs block_on on a tokio worker
@@ -78,7 +79,7 @@ void guard(const char* fn) {
 
 #define NODE_OR_RETURN(result_type)                                                                                    \
     guard(__func__);                                                                                                   \
-    Node* n = sim(node);                                                                                               \
+    Node* n = simulatedNode(node);                                                                                     \
     if (!n) {                                                                                                          \
         result_type r{};                                                                                               \
         r.error = nullNode();                                                                                          \
@@ -153,10 +154,7 @@ FfiInitializedLogosBlockchainNodeResult start_lb_node(const char* config_path, c
         r.error = status(err);
         return r;
     }
-    auto* handle = new LogosBlockchainNode{};
-    handle->chain_id = strdup(node->chainId().c_str());
-    handle->overwatch = node.release();
-    r.value = handle;
+    r.value = reinterpret_cast<LogosBlockchainNode*>(node.release());
     r.error = ok();
     return r;
 }
@@ -165,29 +163,27 @@ OperationStatus shutdown_node(LogosBlockchainNode* node) {
     guard(__func__);
     if (!node)
         return nullNode();
-    Node* n = sim(node);
+    Node* n = simulatedNode(node);
     n->shutdown();
     delete n;
-    std::free(node->chain_id);
-    delete node;
     return ok();
 }
 
-OperationStatus subscribe_to_new_blocks(const LogosBlockchainNode* node, CCallback______c_char cb) {
+OperationStatus subscribe_to_new_blocks(const LogosBlockchainNode* node, EventCallback cb) {
     guard(__func__);
-    Node* n = sim(node);
+    Node* n = simulatedNode(node);
     return n ? status(n->subscribe(lbmock::Stream::NewBlocks, cb)) : nullNode();
 }
 
-OperationStatus subscribe_to_processed_blocks(const LogosBlockchainNode* node, CCallback______c_char cb) {
+OperationStatus subscribe_to_processed_blocks(const LogosBlockchainNode* node, EventCallback cb) {
     guard(__func__);
-    Node* n = sim(node);
+    Node* n = simulatedNode(node);
     return n ? status(n->subscribe(lbmock::Stream::ProcessedBlocks, cb)) : nullNode();
 }
 
-OperationStatus subscribe_to_lib_blocks(const LogosBlockchainNode* node, CCallback______c_char cb) {
+OperationStatus subscribe_to_lib_blocks(const LogosBlockchainNode* node, EventCallback cb) {
     guard(__func__);
-    Node* n = sim(node);
+    Node* n = simulatedNode(node);
     return n ? status(n->subscribe(lbmock::Stream::LibBlocks, cb)) : nullNode();
 }
 
@@ -560,7 +556,7 @@ FfiLeaderClaimResult leader_claim(const LogosBlockchainNode* node) {
 
 OperationStatus pow_start_mining(const LogosBlockchainNode* node) {
     guard(__func__);
-    Node* n = sim(node);
+    Node* n = simulatedNode(node);
     if (!n)
         return nullNode();
     n->powSetMining(true);
@@ -569,7 +565,7 @@ OperationStatus pow_start_mining(const LogosBlockchainNode* node) {
 
 OperationStatus pow_stop_mining(const LogosBlockchainNode* node) {
     guard(__func__);
-    Node* n = sim(node);
+    Node* n = simulatedNode(node);
     if (!n)
         return nullNode();
     n->powSetMining(false);
@@ -578,7 +574,7 @@ OperationStatus pow_stop_mining(const LogosBlockchainNode* node) {
 
 OperationStatus pow_start_auto_claim(const LogosBlockchainNode* node) {
     guard(__func__);
-    Node* n = sim(node);
+    Node* n = simulatedNode(node);
     if (!n)
         return nullNode();
     n->powSetAutoClaim(true);
@@ -587,7 +583,7 @@ OperationStatus pow_start_auto_claim(const LogosBlockchainNode* node) {
 
 OperationStatus pow_stop_auto_claim(const LogosBlockchainNode* node) {
     guard(__func__);
-    Node* n = sim(node);
+    Node* n = simulatedNode(node);
     if (!n)
         return nullNode();
     n->powSetAutoClaim(false);

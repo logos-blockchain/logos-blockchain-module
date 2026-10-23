@@ -831,14 +831,22 @@ StdLogosResult LogosBlockchainModule::participate(
     const std::string& config_path,
     const std::string& keystore_path,
     const std::string& output_dir,
-    const std::string& external_address
+    const std::string& external_address,
+    const uint64_t external_port
 ) {
     const std::string config = localPathFromFileUrl(config_path);
     const std::string keystore = localPathFromFileUrl(keystore_path);
     const std::string output = localPathFromFileUrl(output_dir);
     const char* external_address_ptr = external_address.empty() ? nullptr : external_address.c_str();
 
-    OperationStatus status = ::participate(config.c_str(), keystore.c_str(), output.c_str(), external_address_ptr);
+    if (external_port > UINT16_MAX) {
+        return result::err("Invalid external_port (65535 at most, 0 for none).");
+    }
+    const uint16_t port = static_cast<uint16_t>(external_port);
+    const uint16_t* external_port_ptr = port == 0 ? nullptr : &port;
+
+    OperationStatus status =
+        ::participate(config.c_str(), keystore.c_str(), output.c_str(), external_address_ptr, external_port_ptr);
     return result::from_operation_status(status);
 }
 

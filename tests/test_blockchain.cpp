@@ -95,6 +95,7 @@ extern std::string g_lastGeneratedStoragePath;
 extern std::string g_lastGeneratedLogsPath;
 extern std::string g_lastMergeExtraYaml;
 extern MergeConfigFlags g_lastMergeFlags;
+extern std::string g_lastParticipateExternalPort;
 
 static void clearGeneratedPaths() {
     g_lastGeneratedOutput.clear();
@@ -2514,8 +2515,31 @@ LOGOS_TEST(participate_returns_0_on_success) {
 
     t.mockCFunction("participate").returns(0);
 
-    LOGOS_ASSERT_TRUE(module.participate("/tmp/config.yaml", "/tmp/keystore.yaml", "/tmp/out", "").success);
+    LOGOS_ASSERT_TRUE(module.participate("/tmp/config.yaml", "/tmp/keystore.yaml", "/tmp/out", "", 0).success);
     LOGOS_ASSERT(t.cFunctionCalled("participate"));
+    LOGOS_ASSERT_EQ(g_lastParticipateExternalPort, std::string("<null>"));
+}
+
+LOGOS_TEST(participate_forwards_the_external_port) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+
+    t.mockCFunction("participate").returns(0);
+
+    LOGOS_ASSERT_TRUE(
+        module.participate("/tmp/config.yaml", "/tmp/keystore.yaml", "/tmp/out", "1.2.3.4", 3000).success
+    );
+    LOGOS_ASSERT_EQ(g_lastParticipateExternalPort, std::string("3000"));
+}
+
+LOGOS_TEST(participate_rejects_an_invalid_external_port) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+
+    StdLogosResult result = module.participate("/tmp/config.yaml", "/tmp/keystore.yaml", "/tmp/out", "", 70000);
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "Invalid external_port"));
+    LOGOS_ASSERT_FALSE(t.cFunctionCalled("participate"));
 }
 
 LOGOS_TEST(participate_returns_1_on_failure) {
@@ -2524,7 +2548,7 @@ LOGOS_TEST(participate_returns_1_on_failure) {
 
     t.mockCFunction("participate").returns(1);
 
-    LOGOS_ASSERT_FALSE(module.participate("/tmp/config.yaml", "/tmp/keystore.yaml", "/tmp/out", "1.2.3.4").success);
+    LOGOS_ASSERT_FALSE(module.participate("/tmp/config.yaml", "/tmp/keystore.yaml", "/tmp/out", "1.2.3.4", 0).success);
 }
 
 // ============================================================================

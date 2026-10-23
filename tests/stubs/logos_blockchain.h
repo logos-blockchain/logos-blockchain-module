@@ -274,7 +274,8 @@ OperationStatus participate(
     const char* config_path,
     const char* keystore_path,
     const char* output_dir,
-    const char* external_address);
+    const char* external_address,
+    const uint16_t* external_port);
 
 // Keystore
 StringResult generate_key(
