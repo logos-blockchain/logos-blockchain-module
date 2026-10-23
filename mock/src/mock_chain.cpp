@@ -858,10 +858,20 @@ void Node::processBlock(size_t index, std::vector<Emitted>& out) {
 bool Node::memberOf(uint32_t epoch) const {
     if (!m_declaration)
         return false;
+    if (m_declaration->withdrawAt && epoch >= *m_declaration->withdrawAt)
+        return false;
     return m_declaration->created + 2 <= epoch && m_declaration->active + m_params.inactivityPeriod >= epoch;
 }
 
 void Node::onEpochStart(uint32_t epoch, uint64_t slot, json& headerEvents) {
+    if (m_declaration && m_declaration->withdrawAt && epoch > *m_declaration->withdrawAt) {
+        auto note = m_notes.find(m_declaration->noteId);
+        if (note != m_notes.end() && note->second.service) {
+            note->second.service = false;
+            LBLOG("Blend declaration withdrawn; locked note %s unlocked", hex(m_declaration->noteId).c_str());
+        }
+    }
+
     // Activity for the epoch that just ended: a proof only exists if the node
     // served it as a core node, and the draw can still miss.
     if (m_declaration && epoch >= 1) {
@@ -1087,6 +1097,7 @@ bool Node::applyTxUnchecked(const PendingTx& tx, uint64_t slot, json& events, st
     std::vector<Note> channelNotes;
     std::optional<Declaration> declared;
     std::optional<std::pair<uint64_t, uint32_t>> activity; // nonce, epoch
+    bool withdrawn = false;
     std::vector<Bytes32> claimedVouchers, retiredTickets;
     std::map<std::string, json> channels = m_channels;
     json txEvents = json::array();
@@ -1216,6 +1227,20 @@ bool Node::applyTxUnchecked(const PendingTx& tx, uint64_t slot, json& events, st
             activity = {nonce, p.value("metadata", json::object()).value("Blend", json::object()).value("epoch", 0u)};
             break;
         }
+        case 33: {
+            Bytes32 id{};
+            parseHex32(p.value("declaration_id", std::string()), id);
+            if (!m_declaration || m_declaration->id != id) {
+                why = "unknown declaration";
+                return false;
+            }
+            if (m_declaration->withdrawAt) {
+                why = "declaration already withdrawn";
+                return false;
+            }
+            withdrawn = true;
+            break;
+        }
         case 48: {
             Bytes32 nullifier{}, pk{};
             parseHex32(p.value("voucher_nullifier", std::string()), nullifier);
@@ -1340,6 +1365,11 @@ bool Node::applyTxUnchecked(const PendingTx& tx, uint64_t slot, json& events, st
     if (activity && m_declaration) {
         m_declaration->active = std::max(m_declaration->active, epochOf(slot));
         m_activityAccepted.insert(activity->second);
+    }
+    if (withdrawn) {
+        m_declaration->withdrawAt = epochOf(slot) + 2;
+        LBLOG("Blend withdrawal on-chain in epoch %u; out of the core set from epoch %u", epochOf(slot),
+             *m_declaration->withdrawAt);
     }
     for (const auto& n : claimedVouchers)
         for (auto& v : m_vouchers)
@@ -1873,6 +1903,45 @@ Bytes32 Node::blendJoin(const std::string& locator, const Bytes32& noteId, Error
     return id;
 }
 
+BlendWithdrawalView Node::blendWithdraw(Error& err) {
+    std::lock_guard lock(m_mutex);
+    if (m_mode != Mode::Online) {
+        err = {kServiceError, "The node is not online yet."};
+        return {};
+    }
+    if (!m_declaration || m_declaration->withdrawalPosted) {
+        err = {kNotFound, "The node has no live Blend declaration to withdraw."};
+        return {};
+    }
+    json ops = json::array({{{"opcode", 33},
+                             {"payload",
+                              {{"declaration_id", hex(m_declaration->id)},
+                               {"nonce", m_declaration->nonce + 1},
+                               {"locked_note_id", hex(m_declaration->noteId)}}}}});
+    json proofs = json::array({zkSig(m_rng())});
+    std::vector<Note> picked;
+    uint64_t txFee = 0, available = 0;
+    if (!selectFunding({m_cfg.sdpFundingPk}, 0, ops, proofs, picked, txFee, available) ||
+        txFee > m_cfg.sdpMaxTxFee) {
+        err = {kServiceError, "Failed to withdraw: InsufficientFunds { available: " + std::to_string(available) + " }"};
+        return {};
+    }
+    uint64_t in = 0;
+    std::set<Bytes32> reserves;
+    for (auto& n : picked) {
+        in += n.value;
+        reserves.insert(n.id);
+    }
+    std::vector<std::pair<uint64_t, Bytes32>> outs;
+    if (in > txFee)
+        outs.push_back({in - txFee, m_cfg.sdpFundingPk});
+    ops.push_back(transferOp(picked, outs));
+    proofs.push_back(zkSig(m_rng()));
+    m_declaration->nonce += 1;
+    m_declaration->withdrawalPosted = true;
+    return {enqueue(ops, proofs, reserves), epochOf(m_chain[m_tip]) + 3};
+}
+
 // ==== PoW ====================================================================
 
 void Node::powSetMining(bool on) {
@@ -2036,7 +2105,10 @@ void Node::loadState() {
                                     d["locator"].get<std::string>(),
                                     d["created"].get<uint32_t>(),
                                     d["active"].get<uint32_t>(),
-                                    d["nonce"].get<uint64_t>()};
+                                    d["nonce"].get<uint64_t>(),
+                                    d.value("withdrawal_posted", false)};
+        if (d.contains("withdraw_at"))
+            m_declaration->withdrawAt = d["withdraw_at"].get<uint32_t>();
     }
     for (const auto& e : s.value("activity_accepted", json::array()))
         m_activityAccepted.insert(e.get<uint32_t>());
@@ -2113,7 +2185,10 @@ void Node::saveState() {
                             {"locator", m_declaration->locator},
                             {"created", m_declaration->created},
                             {"active", m_declaration->active},
-                            {"nonce", m_declaration->nonce}};
+                            {"nonce", m_declaration->nonce},
+                            {"withdrawal_posted", m_declaration->withdrawalPosted}};
+    if (m_declaration && m_declaration->withdrawAt)
+        s["declaration"]["withdraw_at"] = *m_declaration->withdrawAt;
     if (m_cfg.sdpDeclarationId)
         s["sdp_declaration_id"] = hex(*m_cfg.sdpDeclarationId);
     s["activity_accepted"] = m_activityAccepted;

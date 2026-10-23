@@ -477,6 +477,15 @@ LOGOS_TEST(blend_requirements_without_node_returns_error) {
     LOGOS_ASSERT_FALSE(t.cFunctionCalled("blend_requirements"));
 }
 
+LOGOS_TEST(blend_withdraw_without_node_returns_error) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+    StdLogosResult result = module.blend_withdraw();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
+    LOGOS_ASSERT_FALSE(t.cFunctionCalled("blend_withdraw"));
+}
+
 LOGOS_TEST(get_chain_id_without_node_returns_error) {
     auto t = LogosTestContext("blockchain_module");
     LogosBlockchainModule module;
@@ -1651,6 +1660,40 @@ LOGOS_TEST(blend_requirements_returns_error_on_ffi_failure) {
     t.mockCFunction("blend_requirements_error").returns(1);
 
     StdLogosResult result = module->blend_requirements();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "mock error"));
+    delete module;
+}
+
+LOGOS_TEST(blend_withdraw_returns_json_on_success) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("blend_withdraw_error").returns(0);
+    t.mockCFunction("blend_withdraw_unlocks_at_epoch").returns(7);
+
+    StdLogosResult result = module->blend_withdraw();
+    LOGOS_ASSERT_TRUE(result.success);
+    std::string json = result.value.get<std::string>();
+    std::string tx_hash;
+    for (int i = 0; i < 32; ++i) tx_hash += "bb";
+    LOGOS_ASSERT_TRUE(contains(json, "\"tx_hash\":\"" + tx_hash + "\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"unlocks_at_epoch\":7"));
+    LOGOS_ASSERT(t.cFunctionCalled("blend_withdraw"));
+    delete module;
+}
+
+LOGOS_TEST(blend_withdraw_returns_error_on_ffi_failure) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("blend_withdraw_error").returns(1);
+
+    StdLogosResult result = module->blend_withdraw();
     LOGOS_ASSERT_FALSE(result.success);
     LOGOS_ASSERT_TRUE(contains(result.error, "mock error"));
     delete module;

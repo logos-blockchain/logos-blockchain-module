@@ -329,6 +329,21 @@ FfiBlendRequirementsResult blend_requirements(const LogosBlockchainNode* node) {
     return r;
 }
 
+FfiStatusResult_BlendWithdrawal blend_withdraw(const LogosBlockchainNode* node) {
+    NODE_OR_RETURN(FfiStatusResult_BlendWithdrawal)
+    Error err;
+    const lbmock::BlendWithdrawalView v = n->blendWithdraw(err);
+    FfiStatusResult_BlendWithdrawal r{};
+    if (err) {
+        r.error = status(err);
+        return r;
+    }
+    std::memcpy(r.value.tx_hash, v.txHash.data(), 32);
+    r.value.unlocks_at_epoch = v.unlocksAtEpoch;
+    r.error = ok();
+    return r;
+}
+
 FfiStatusResult_DeclarationId blend_join_as_core_node(const LogosBlockchainNode* node, const char* locator,
                                                        const uint8_t* service_note_id) {
     NODE_OR_RETURN(FfiStatusResult_DeclarationId)

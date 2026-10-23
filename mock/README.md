@@ -87,6 +87,9 @@ exact shapes and where each one comes from.
     header events and a note on the BlendZk key.
   - The locked stake note stays in `wallet_get_notes` and the balance, as on the
     real node.
+  - `blend_withdraw` fails right away unless Online, and with `NotFound` without a
+    declaration in the ledger. A withdrawal landing in epoch E drops the node from
+    the core set at E+2 and unlocks the stake note at E+3.
 
 ## Knobs
 

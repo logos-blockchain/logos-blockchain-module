@@ -220,6 +220,12 @@ typedef struct {
     uint64_t minimum_network_size_for_rewards;
 } BlendRequirements;
 
+// A posted Blend withdrawal: its transaction and the epoch the locked note unlocks.
+typedef struct {
+    TxHash tx_hash;
+    uint32_t unlocks_at_epoch;
+} BlendWithdrawal;
+
 // libp2p connectivity counters (plain values, no free call needed)
 typedef struct {
     size_t n_peers;
@@ -241,6 +247,7 @@ typedef struct { ClaimableVouchers value; OperationStatus error; } FfiClaimableV
 typedef struct { Hash value; OperationStatus error; } BlendHashResult;
 typedef struct { char* value; OperationStatus error; } StringResult;
 typedef struct { BlendRequirements value; OperationStatus error; } FfiBlendRequirementsResult;
+typedef struct { BlendWithdrawal value; OperationStatus error; } FfiStatusResult_BlendWithdrawal;
 typedef struct { CryptarchiaInfo* value; OperationStatus error; } CryptarchiaInfoResult;
 typedef struct { TimeInfo* value; OperationStatus error; } TimeInfoResult;
 typedef struct { Hash value; OperationStatus error; } SubmitTransactionResult;
@@ -343,6 +350,7 @@ BlendHashResult blend_join_as_core_node(
     const uint8_t* locked_note_id);
 StringResult blend_info(LogosBlockchainNode* node);
 FfiBlendRequirementsResult blend_requirements(const LogosBlockchainNode* node);
+FfiStatusResult_BlendWithdrawal blend_withdraw(const LogosBlockchainNode* node);
 
 // Chain
 FfiGetChainIdResult get_chain_id(const LogosBlockchainNode* node);

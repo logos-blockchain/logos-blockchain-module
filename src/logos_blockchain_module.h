@@ -208,6 +208,9 @@ public:
     //   { minimum_stake, declaration_activation_delay_epochs, withdrawal_unlock_delay_epochs,
     //     inactivity_timeout_epochs, minimum_network_size_for_rewards }
     [[nodiscard]] StdLogosResult blend_requirements() const;
+    // Withdraws the node's live Blend declaration, leaving the core set. Fails if the node is not online
+    // or has no live declaration. Returns JSON: { tx_hash, unlocks_at_epoch }
+    [[nodiscard]] StdLogosResult blend_withdraw() const;
 
     // Chain
     // Chain ID of the deployment the running node was started with. Fixed for the node's lifetime.

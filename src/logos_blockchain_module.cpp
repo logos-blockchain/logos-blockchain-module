@@ -1748,6 +1748,22 @@ StdLogosResult LogosBlockchainModule::blend_requirements() const {
     return result::ok(blend_requirements_to_json(value).dump());
 }
 
+StdLogosResult LogosBlockchainModule::blend_withdraw() const {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+
+    auto [value, error] = ::blend_withdraw(node);
+    if (!is_ok(&error)) {
+        return result::err(operation_status::take_message(error));
+    }
+
+    json obj;
+    obj["tx_hash"] = bytes_to_hex(value.tx_hash, TX_HASH_BYTES);
+    obj["unlocks_at_epoch"] = value.unlocks_at_epoch;
+    return result::ok(obj.dump());
+}
+
 // Chain
 
 StdLogosResult LogosBlockchainModule::get_chain_id() const {
