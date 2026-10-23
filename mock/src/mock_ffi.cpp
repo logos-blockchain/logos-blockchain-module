@@ -28,7 +28,7 @@ using lbmock::Node;
 
 // The header only forward-declares the node handle, so the mock defines its own.
 struct LogosBlockchainNode {
-    Node* sim;
+    Node* simulated_node;
 };
 
 namespace {
@@ -58,7 +58,7 @@ OperationStatus status(OperationStatusCode code, const std::string& message) {
 OperationStatus nullNode() { return status(NullPointer, "Received a null `node` pointer."); }
 
 Node* sim(const LogosBlockchainNode* node) {
-    return node ? node->sim : nullptr;
+    return node ? node->simulated_node : nullptr;
 }
 
 // A real FFI call from a stream callback runs block_on on a tokio worker

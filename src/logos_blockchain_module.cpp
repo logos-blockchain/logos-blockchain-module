@@ -832,24 +832,18 @@ StdLogosResult LogosBlockchainModule::participate(
     const std::string& keystore_path,
     const std::string& output_dir,
     const std::string& external_address,
-    const std::string& external_port
+    const uint64_t external_port
 ) {
     const std::string config = localPathFromFileUrl(config_path);
     const std::string keystore = localPathFromFileUrl(keystore_path);
     const std::string output = localPathFromFileUrl(output_dir);
     const char* external_address_ptr = external_address.empty() ? nullptr : external_address.c_str();
 
-    std::string port_trimmed = external_port;
-    boost::algorithm::trim(port_trimmed);
-    uint16_t port_val = 0;
-    const uint16_t* external_port_ptr = nullptr;
-    if (!port_trimmed.empty()) {
-        auto [ptr, ec] = std::from_chars(port_trimmed.data(), port_trimmed.data() + port_trimmed.size(), port_val);
-        if (ec != std::errc{} || ptr != port_trimmed.data() + port_trimmed.size()) {
-            return result::err("Invalid external_port (integer between 1 and 65535 or empty).");
-        }
-        external_port_ptr = &port_val;
+    if (external_port > UINT16_MAX) {
+        return result::err("Invalid external_port (65535 at most, 0 for none).");
     }
+    const uint16_t port = static_cast<uint16_t>(external_port);
+    const uint16_t* external_port_ptr = port == 0 ? nullptr : &port;
 
     OperationStatus status =
         ::participate(config.c_str(), keystore.c_str(), output.c_str(), external_address_ptr, external_port_ptr);
