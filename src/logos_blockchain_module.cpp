@@ -1802,18 +1802,39 @@ StdLogosResult LogosBlockchainModule::blend_rewards() const {
 }
 
 namespace {
-    // Indexed by the FFI enums' values, which follow the node's declaration order.
-    constexpr const char* DECLARATION_STATES[] = {
-        "not_declared", "pending", "activating", "active", "inactive", "withdrawn",
-    };
-    constexpr const char* PROOF_STATES[] = {"pending", "accepted", "failed", "not_required"};
-    constexpr const char* PROOF_REASONS[] = {
-        "no_proof",    "declaration_not_found", "transaction_build_failed", "mempool_rejected",
-        "first_epoch", "network_below_minimum", "not_in_activity_epoch",
-    };
+    json declaration_state_name(const DeclarationState state) {
+        switch (state) {
+            case DeclarationState_NotDeclared: return "not_declared";
+            case DeclarationState_Pending: return "pending";
+            case DeclarationState_Activating: return "activating";
+            case DeclarationState_Active: return "active";
+            case DeclarationState_Inactive: return "inactive";
+            case DeclarationState_Withdrawn: return "withdrawn";
+        }
+        return nullptr;
+    }
 
-    template <size_t N> json enum_name(const char* const (&names)[N], const size_t index) {
-        return index < N ? json(names[index]) : json(nullptr);
+    json proof_state_name(const ProofState state) {
+        switch (state) {
+            case ProofState_Pending: return "pending";
+            case ProofState_Accepted: return "accepted";
+            case ProofState_Failed: return "failed";
+            case ProofState_NotRequired: return "not_required";
+        }
+        return nullptr;
+    }
+
+    json proof_reason_name(const ProofReason reason) {
+        switch (reason) {
+            case NoProof: return "no_proof";
+            case DeclarationNotFound: return "declaration_not_found";
+            case TransactionBuildFailed: return "transaction_build_failed";
+            case MempoolRejected: return "mempool_rejected";
+            case FirstEpoch: return "first_epoch";
+            case NetworkBelowMinimum: return "network_below_minimum";
+            case NotInActivityEpoch: return "not_in_activity_epoch";
+        }
+        return nullptr;
     }
 
     json optional_u32(const FfiOption_u32& option) {
@@ -1833,7 +1854,7 @@ StdLogosResult LogosBlockchainModule::blend_status() const {
 
     json obj;
     obj["is_core"] = value.is_core;
-    obj["declaration_state"] = enum_name(DECLARATION_STATES, static_cast<size_t>(value.declaration_state));
+    obj["declaration_state"] = declaration_state_name(value.declaration_state);
     obj["current_epoch"] = value.current_epoch;
 
     obj["declaration"] = nullptr;
@@ -1855,11 +1876,9 @@ StdLogosResult LogosBlockchainModule::blend_status() const {
         const ActivityStatus& activity = value.activity.value;
         obj["activity"] = {
             {"activity_epoch", optional_u32(activity.activity_epoch)},
-            {"proof_state", enum_name(PROOF_STATES, static_cast<size_t>(activity.proof_state))},
+            {"proof_state", proof_state_name(activity.proof_state)},
             {"proof_reason",
-             activity.proof_reason.is_some
-                 ? enum_name(PROOF_REASONS, static_cast<size_t>(activity.proof_reason.value))
-                 : json(nullptr)},
+             activity.proof_reason.is_some ? proof_reason_name(activity.proof_reason.value) : json(nullptr)},
             {"last_active_epoch", activity.last_active_epoch},
         };
     }

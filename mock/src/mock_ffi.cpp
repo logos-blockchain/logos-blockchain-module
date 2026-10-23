@@ -368,7 +368,6 @@ FfiBlendRewardsResult blend_rewards(const LogosBlockchainNode* node) {
     return r;
 }
 
-// The header's DeclarationState and ProofState both declare `Pending`, so enum values are set by number.
 FfiBlendStatusResult blend_status(const LogosBlockchainNode* node) {
     NODE_OR_RETURN(FfiBlendStatusResult)
     Error err;

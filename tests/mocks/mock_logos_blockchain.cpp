@@ -485,7 +485,7 @@ FfiBlendStatusResult blend_status(const LogosBlockchainNode* node) {
             result.value.activity.is_some = true;
             activity.activity_epoch = {true, 8};
             activity.proof_state = ProofState_Failed;
-            activity.proof_reason = {true, ProofReason_MempoolRejected};
+            activity.proof_reason = {true, MempoolRejected};
             activity.last_active_epoch = 7;
             result.value.tokens_collected_in_current_epoch = {true, 12};
             result.value.session_peers = {true, {4, 3}};

@@ -252,8 +252,7 @@ typedef struct {
     FfiOption_BlendRewardEstimate estimate;
 } BlendRewards;
 
-// Blend status enums. The enumerators are prefixed here because DeclarationState and ProofState both
-// have a Pending; the module only reads their numeric values.
+// Blend status enums. DeclarationState and ProofState are prefixed with their name, as both have a Pending.
 typedef enum {
     DeclarationState_NotDeclared,
     DeclarationState_Pending,
@@ -271,13 +270,13 @@ typedef enum {
 } ProofState;
 
 typedef enum {
-    ProofReason_NoProof,
-    ProofReason_DeclarationNotFound,
-    ProofReason_TransactionBuildFailed,
-    ProofReason_MempoolRejected,
-    ProofReason_FirstEpoch,
-    ProofReason_NetworkBelowMinimum,
-    ProofReason_NotInActivityEpoch,
+    NoProof,
+    DeclarationNotFound,
+    TransactionBuildFailed,
+    MempoolRejected,
+    FirstEpoch,
+    NetworkBelowMinimum,
+    NotInActivityEpoch,
 } ProofReason;
 
 typedef struct { uint8_t _0[32]; } DeclarationId;
