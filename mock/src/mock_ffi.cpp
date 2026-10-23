@@ -26,11 +26,6 @@ using lbmock::Bytes32;
 using lbmock::Error;
 using lbmock::Node;
 
-// The header only forward-declares the node handle, so the mock defines its own.
-struct LogosBlockchainNode {
-    Node* simulated_node;
-};
-
 namespace {
 
 std::mutex g_allocMutex;
@@ -57,8 +52,9 @@ OperationStatus status(OperationStatusCode code, const std::string& message) {
 
 OperationStatus nullNode() { return status(NullPointer, "Received a null `node` pointer."); }
 
+// The handle is opaque to callers, so the mock hands out the simulated node itself.
 Node* sim(const LogosBlockchainNode* node) {
-    return node ? node->simulated_node : nullptr;
+    return reinterpret_cast<Node*>(const_cast<LogosBlockchainNode*>(node));
 }
 
 // A real FFI call from a stream callback runs block_on on a tokio worker
@@ -158,7 +154,7 @@ FfiInitializedLogosBlockchainNodeResult start_lb_node(const char* config_path, c
         r.error = status(err);
         return r;
     }
-    r.value = new LogosBlockchainNode{node.release()};
+    r.value = reinterpret_cast<LogosBlockchainNode*>(node.release());
     r.error = ok();
     return r;
 }
@@ -170,7 +166,6 @@ OperationStatus shutdown_node(LogosBlockchainNode* node) {
     Node* n = sim(node);
     n->shutdown();
     delete n;
-    delete node;
     return ok();
 }
 
