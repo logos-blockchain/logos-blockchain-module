@@ -21,6 +21,10 @@ std::string g_lastGeneratedLogsPath;
 // sentinel "<null>".
 std::string g_lastPowClaimAddress;
 
+// Captures the external port passed to the most recent participate call. A
+// null pointer is recorded as the sentinel "<null>".
+std::string g_lastParticipateExternalPort;
+
 // Captures the callbacks passed to the subscription calls so tests can drive
 // the streams (including the NULL end-of-stream sentinel).
 BlockCallback g_lastNewBlockCallback = nullptr;
@@ -121,9 +125,11 @@ OperationStatus participate(
     const char* config_path,
     const char* keystore_path,
     const char* output_dir,
-    const char* external_address)
+    const char* external_address,
+    const uint16_t* external_port)
 {
     LOGOS_CMOCK_RECORD("participate");
+    g_lastParticipateExternalPort = external_port ? std::to_string(*external_port) : "<null>";
     return make_status(LOGOS_CMOCK_RETURN(int, "participate"));
 }
 

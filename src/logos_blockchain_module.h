@@ -91,7 +91,8 @@ public:
         const std::string& config_path,
         const std::string& keystore_path,
         const std::string& output_dir,
-        const std::string& external_address
+        const std::string& external_address,
+        const std::string& external_port
     );
 
     // Keystore
