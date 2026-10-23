@@ -486,6 +486,15 @@ LOGOS_TEST(blend_withdraw_without_node_returns_error) {
     LOGOS_ASSERT_FALSE(t.cFunctionCalled("blend_withdraw"));
 }
 
+LOGOS_TEST(blend_rewards_without_node_returns_error) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+    StdLogosResult result = module.blend_rewards();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "not running"));
+    LOGOS_ASSERT_FALSE(t.cFunctionCalled("blend_rewards"));
+}
+
 LOGOS_TEST(get_chain_id_without_node_returns_error) {
     auto t = LogosTestContext("blockchain_module");
     LogosBlockchainModule module;
@@ -1694,6 +1703,59 @@ LOGOS_TEST(blend_withdraw_returns_error_on_ffi_failure) {
     t.mockCFunction("blend_withdraw_error").returns(1);
 
     StdLogosResult result = module->blend_withdraw();
+    LOGOS_ASSERT_FALSE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.error, "mock error"));
+    delete module;
+}
+
+LOGOS_TEST(blend_rewards_returns_estimate) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("blend_rewards_error").returns(0);
+    t.mockCFunction("blend_rewards_has_estimate").returns(1);
+
+    StdLogosResult result = module->blend_rewards();
+    LOGOS_ASSERT_TRUE(result.success);
+    std::string json = result.value.get<std::string>();
+    std::string reward_key;
+    for (int i = 0; i < 32; ++i) reward_key += "cc";
+    LOGOS_ASSERT_TRUE(contains(json, "\"reward_key\":\"" + reward_key + "\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"activity_epoch\":4"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"pool_so_far\":\"1500\""));
+    LOGOS_ASSERT_TRUE(contains(json, "\"network_size\":5"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"proofs_submitted\":4"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"my_proof_submitted\":true"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"premium\":true"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"estimated_reward\":\"600\""));
+    delete module;
+}
+
+LOGOS_TEST(blend_rewards_reports_null_estimate_when_nothing_is_paid_out) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("blend_rewards_error").returns(0);
+
+    StdLogosResult result = module->blend_rewards();
+    LOGOS_ASSERT_TRUE(result.success);
+    LOGOS_ASSERT_TRUE(contains(result.value.get<std::string>(), "\"estimate\":null"));
+    delete module;
+}
+
+LOGOS_TEST(blend_rewards_returns_error_on_ffi_failure) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("blend_rewards_error").returns(1);
+
+    StdLogosResult result = module->blend_rewards();
     LOGOS_ASSERT_FALSE(result.success);
     LOGOS_ASSERT_TRUE(contains(result.error, "mock error"));
     delete module;

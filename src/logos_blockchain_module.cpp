@@ -1768,6 +1768,35 @@ StdLogosResult LogosBlockchainModule::blend_withdraw() const {
     return result::ok(blend_withdrawal_to_json(value).dump());
 }
 
+StdLogosResult LogosBlockchainModule::blend_rewards() const {
+    if (!node) {
+        return result::err("The node is not running.");
+    }
+
+    auto [value, error] = ::blend_rewards(node);
+    if (!is_ok(&error)) {
+        return result::err(operation_status::take_message(error));
+    }
+
+    json obj;
+    obj["reward_key"] = bytes_to_hex(value.reward_key, ADDRESS_BYTES);
+    obj["estimate"] = nullptr;
+    if (value.estimate.is_some) {
+        const BlendRewardEstimate& estimate = value.estimate.value;
+        // Values are u64; serialized as strings to avoid JSON number precision loss.
+        obj["estimate"] = {
+            {"activity_epoch", estimate.activity_epoch},
+            {"pool_so_far", std::to_string(estimate.pool_so_far)},
+            {"network_size", estimate.network_size},
+            {"proofs_submitted", estimate.proofs_submitted},
+            {"my_proof_submitted", estimate.my_proof_submitted},
+            {"premium", estimate.premium},
+            {"estimated_reward", std::to_string(estimate.estimated_reward)},
+        };
+    }
+    return result::ok(obj.dump());
+}
+
 // Chain
 
 StdLogosResult LogosBlockchainModule::get_chain_id() const {

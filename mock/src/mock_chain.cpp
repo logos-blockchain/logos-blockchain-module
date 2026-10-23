@@ -1942,6 +1942,44 @@ BlendWithdrawalView Node::blendWithdraw(Error& err) {
     return {enqueue(ops, proofs, reserves), epochOf(m_chain[m_tip]) + 3};
 }
 
+// Mirrors the payout in onEpochStart for the epoch before the tip's, which is paid at the start of the next one.
+BlendRewardsView Node::blendRewards(Error& err) {
+    std::lock_guard lock(m_mutex);
+    if (m_mode != Mode::Online) {
+        err = {kServiceError, "The node is not online yet."};
+        return {};
+    }
+    if (!m_declaration) {
+        err = {kNotFound, m_cfg.sdpDeclarationId ? "The node has no Blend declaration in the ledger."
+                                                 : "The node has no Blend declaration."};
+        return {};
+    }
+    BlendRewardsView v;
+    v.rewardKey = m_declaration->zkId;
+    const uint32_t epoch = epochOf(m_chain[m_tip]);
+    if (epoch == 0)
+        return v;
+    const uint32_t activity = epoch - 1;
+    uint64_t proofs = 0;
+    for (size_t i = 0; i < m_params.genesisProviders.size(); ++i)
+        if (unit(m_params.seed, 12, activity, i) < m_params.blendActivityHitRate)
+            ++proofs;
+    BlendRewardsView::Estimate e;
+    e.activityEpoch = activity;
+    e.pool = epochBlendIncome(activity);
+    e.networkSize = m_params.genesisProviders.size() + (memberOf(activity) ? 1 : 0);
+    e.didSubmitProof = m_activityAccepted.count(activity) > 0;
+    if (e.didSubmitProof)
+        ++proofs;
+    e.proofs = proofs;
+    // The node's own recipient is the last one.
+    e.isPremium = e.didSubmitProof && key(m_params.seed, 13, activity) % proofs == proofs - 1;
+    if (e.didSubmitProof && e.networkSize >= m_params.minimumNetworkSize)
+        e.estimatedReward = e.pool / (proofs + 1) * (e.isPremium ? 2 : 1);
+    v.estimate = e;
+    return v;
+}
+
 // ==== PoW ====================================================================
 
 void Node::powSetMining(bool on) {

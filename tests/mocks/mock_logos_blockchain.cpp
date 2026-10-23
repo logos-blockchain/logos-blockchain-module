@@ -438,6 +438,29 @@ FfiStatusResult_BlendWithdrawal blend_withdraw(const LogosBlockchainNode* node) 
     return result;
 }
 
+FfiBlendRewardsResult blend_rewards(const LogosBlockchainNode* node) {
+    LOGOS_CMOCK_RECORD("blend_rewards");
+    FfiBlendRewardsResult result;
+    int err = LOGOS_CMOCK_RETURN(int, "blend_rewards_error");
+    result.error = make_status(err);
+    result.value = BlendRewards{};
+    if (err == 0) {
+        memset(result.value.reward_key, 0xCC, sizeof(result.value.reward_key));
+        // A non-zero flag sets the estimate for activity epoch 4: a premium share of 600 out of 1500.
+        if (LOGOS_CMOCK_RETURN(int, "blend_rewards_has_estimate") != 0) {
+            result.value.estimate.is_some = true;
+            result.value.estimate.value.activity_epoch = 4;
+            result.value.estimate.value.pool_so_far = 1500;
+            result.value.estimate.value.network_size = 5;
+            result.value.estimate.value.proofs_submitted = 4;
+            result.value.estimate.value.my_proof_submitted = true;
+            result.value.estimate.value.premium = true;
+            result.value.estimate.value.estimated_reward = 600;
+        }
+    }
+    return result;
+}
+
 FfiGetChainIdResult get_chain_id(const LogosBlockchainNode* node) {
     LOGOS_CMOCK_RECORD("get_chain_id");
     FfiGetChainIdResult result;

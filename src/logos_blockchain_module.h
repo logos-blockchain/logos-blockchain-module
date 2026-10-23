@@ -211,6 +211,11 @@ public:
     // Withdraws the node's live Blend declaration, leaving the core set. Fails if the node is not online
     // or has no live declaration. Returns JSON: { tx_hash, unlocks_at_epoch }
     [[nodiscard]] StdLogosResult blend_withdraw() const;
+    // The node's estimated Blend reward for the epoch being paid out, based on the proofs submitted so far.
+    // Fails if the node is not online or has no declaration in the ledger. Returns JSON:
+    //   { reward_key, estimate: null | { activity_epoch, pool_so_far, network_size, proofs_submitted,
+    //                                    my_proof_submitted, premium, estimated_reward } }
+    [[nodiscard]] StdLogosResult blend_rewards() const;
 
     // Chain
     // Chain ID of the deployment the running node was started with. Fixed for the node's lifetime.
