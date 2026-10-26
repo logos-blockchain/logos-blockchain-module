@@ -3,7 +3,7 @@ name: blockchain-module Doc-Tests
 # Runs the executable blockchain-module doc-tests end-to-end via the shared
 # doctest CLI:
 #   - blockchain-module-config.test.yaml: packages and installs THIS commit of
-#     the blockchain module as an .lgx, starts a logoscore daemon, loads the
+#     the blockchain module as an .lgx, starts a logosctl daemon, loads the
 #     module, and generates node configs (with bootstrap peers, and with
 #     skip_ibd for a peerless run).
 #   - blockchain-module-runtime.test.yaml: takes that config and drives a real
@@ -248,7 +248,7 @@ jobs:
               `${marker}\n` +
               `### 📊 blockchain-module doc-test report\n\n` +
               `This commit of the blockchain module, packaged as an \`.lgx\` and ` +
-              `driven through a logoscore daemon — config generation and a full ` +
+              `driven through a logosctl daemon — config generation and a full ` +
               `node lifecycle — rendered alongside the commands actually run and ` +
               `their output (updated each run, commit \`${context.sha.slice(0,7)}\`):\n\n` +
               `${links}\n\n` +
