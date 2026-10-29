@@ -3017,6 +3017,47 @@ LOGOS_TEST(read_accounts_never_reports_secret_keys) {
     LOGOS_ASSERT_FALSE(contains(json, "Ed25519"));
 }
 
+// Since node 0.3.3 a config holds only what differs from the defaults, and the
+// keys live in the keystore alone. The reader puts the keystore's values
+// underneath the file, so a sparse config lists its accounts like a full one
+// and an auto-claim target still defaults to the leader's funding key.
+static const char* const SPARSE_KEYSTORE = R"(public_keys:
+  LeaderFunding: 39e16b432574571a6bcd8ee36e370589641bd9f35367f6f97a972453c46c3225
+  NetworkSwarm: 9750fa86471fddc69749aa9f8568ef6635e64d9f9aa815e8cb932cea183c8e18
+  VaucherMaster: 5a28a06daa1320faddef1be9429f550d7bebce09b96cc19a4943600b839b5619
+secret_keys:
+  LeaderFunding: !Zk 1111111111111111111111111111111111111111111111111111111111111111
+  NetworkSwarm: !Ed25519 2222222222222222222222222222222222222222222222222222222222222222
+  VaucherMaster: !Zk 3333333333333333333333333333333333333333333333333333333333333333
+)";
+
+LOGOS_TEST(read_accounts_fills_in_what_a_sparse_config_leaves_to_the_keystore) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    const std::string config = tmpDir.filePath("user_config.yaml");
+    std::ofstream(config) << "network:\n  backend:\n    initial_peers: []\n";
+    writeKeystore(tmpDir, SPARSE_KEYSTORE);
+
+    const StdLogosResult result = LogosBlockchainModule().read_accounts(config);
+    LOGOS_ASSERT_TRUE(result.success);
+    const std::string json = result.value.get<std::string>();
+    // The zk keys are the wallet's accounts; the swarm key is not one.
+    LOGOS_ASSERT_TRUE(contains(json, "\"public_key\":\"39e16b43"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"public_key\":\"5a28a06d"));
+    LOGOS_ASSERT_FALSE(contains(json, "\"public_key\":\"9750fa86"));
+    LOGOS_ASSERT_TRUE(contains(json, "leader_funding"));
+    LOGOS_ASSERT_TRUE(contains(json, "voucher_master"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"title\":\"LeaderFunding\""));
+
+    LOGOS_ASSERT_TRUE(LogosBlockchainModule::pow_configure(
+        config, R"({"auto_claim_targets": [{"public_key": "", "threshold": 1}]})"
+    ).success);
+    const std::string written = readFileText(config);
+    LOGOS_ASSERT_TRUE(contains(written, "public_key: 39e16b43"));
+    // What the keystore provides is read, never written back.
+    LOGOS_ASSERT_FALSE(contains(written, "known_keys"));
+}
+
 // The pow half mirrors pow_configure's input, so the wizard pre-fills from it.
 // A generated config carries a target already, which is how the step knows
 // auto-claim is on before the user touches anything.

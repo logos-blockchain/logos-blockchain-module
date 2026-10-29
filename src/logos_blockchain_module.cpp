@@ -439,7 +439,7 @@ namespace {
     }
 
     // The pow section as a YAML fragment carrying only the fields the caller
-    // set. merge_mapping merges it key by key, so an omitted field is left
+    // set. merge_yaml_mapping merges it key by key, so an omitted field is left
     // alone and a list is replaced whole — which is exactly the contract this
     // API promises. Empty parents are never emitted: `mining:` with nothing
     // under it is a null, and merging a null would wipe the section.
@@ -479,41 +479,6 @@ namespace {
         return yaml;
     }
 
-    // Merges `src` onto `dst` key by key: mappings recurse, anything else (a
-    // scalar, a list, a null) replaces the destination value whole, and a key
-    // the destination lacks is appended. The node used to offer this as
-    // merge_user_config; since 0.3.3 the module does it itself.
-    bool merge_mapping(fy_document* doc, fy_node* dst, fy_node* src) {
-        void* iter = nullptr;
-        while (fy_node_pair* pair = fy_node_mapping_iterate(src, &iter)) {
-            fy_node* key = fy_node_pair_key(pair);
-            fy_node* value = fy_node_pair_value(pair);
-            const char* key_text = fy_node_get_scalar0(key);
-            if (!key_text)
-                return false;
-
-            fy_node_pair* existing = fy_node_mapping_lookup_pair_by_string(dst, key_text, FY_NT);
-            if (existing && fy_node_is_mapping(fy_node_pair_value(existing)) && fy_node_is_mapping(value)) {
-                if (!merge_mapping(doc, fy_node_pair_value(existing), value))
-                    return false;
-                continue;
-            }
-
-            fy_node* copied = fy_node_copy(doc, value);
-            if (!copied)
-                return false;
-            if (existing) {
-                if (fy_node_pair_set_value(existing, copied) != 0)
-                    return false;
-            } else {
-                fy_node* copied_key = fy_node_copy(doc, key);
-                if (!copied_key || fy_node_mapping_append(dst, copied_key, copied) != 0)
-                    return false;
-            }
-        }
-        return true;
-    }
-
     // Applies a YAML fragment onto the config file, rewriting it in place. The
     // whole document is re-emitted, with the original block style and tags kept,
     // and swapped in with a rename so a failed write leaves the file as it was.
@@ -532,7 +497,7 @@ namespace {
 
         fy_node* root = fy_document_root(doc);
         const bool merged = root && fy_node_is_mapping(root) && fy_node_is_mapping(fy_document_root(extra)) &&
-                            merge_mapping(doc, root, fy_document_root(extra));
+                            merge_yaml_mapping(doc, root, fy_document_root(extra));
         char* text = merged ? fy_emit_document_to_string(doc, FYECF_DEFAULT) : nullptr;
         fy_document_destroy(extra);
         fy_document_destroy(doc);
