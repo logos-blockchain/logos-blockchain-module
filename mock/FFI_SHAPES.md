@@ -329,7 +329,6 @@ The caller signs its own ops and then submits `{mantle_tx: funded_tx, ops_proofs
 - `get_peer_id(config_path)`: a base58 PeerId, no node needed.
 - `generate_key(...)`: the key id.
 - `get_build_version_info()`: JSON.
-- `merge_user_config(...)`: NULL means no conflicts.
 
 These are config-time helpers (`cb/api/{peer,keys,version,config}.rs`). They are synchronous file I/O with `ConfigurationError`/`ValidationError`.
 

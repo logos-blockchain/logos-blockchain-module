@@ -44,11 +44,6 @@ typedef struct {
     char* message;
 } OperationStatus;
 
-typedef struct {
-    bool source_insert_missing;
-    bool extra_insert_missing;
-} MergeConfigFlags;
-
 // Consensus state enum
 typedef enum { Bootstrapping, Online, NotStarted } State;
 
@@ -239,7 +234,6 @@ typedef struct { PoWClaimableRewards value; OperationStatus error; } FfiPoWClaim
 typedef struct { PoWStatus value; OperationStatus error; } FfiPoWStatusResult;
 typedef struct { char* value; OperationStatus error; } FfiGetChainIdResult;
 typedef struct { char* value; OperationStatus error; } FfiGetOpenMetricsResult;
-typedef struct { char* value; OperationStatus error; } FfiMergeUserConfigResult;
 typedef struct { NetworkInfo value; OperationStatus error; } FfiNetworkInfoResult;
 
 // Block event callback
@@ -259,37 +253,22 @@ OperationStatus subscribe_to_processed_blocks(LogosBlockchainNode* node, BlockCa
 OperationStatus subscribe_to_lib_blocks(LogosBlockchainNode* node, BlockCallback callback);
 
 // Config management
-OperationStatus update_user_config(const char* user_config_path, const char* keystore_path);
-OperationStatus migrate_user_config(const char* output_path, const char* keystore_path);
-OperationStatus migrate_user_config_0_1_2(
-    const char* new_config_path,
-    const char* old_config_path,
-    const char* keystore_path);
-FfiMergeUserConfigResult merge_user_config(
-    const char* source_path,
-    const char* destination_path,
-    const char* extra_yaml,
-    MergeConfigFlags flags);
 OperationStatus participate(
     const char* config_path,
-    const char* keystore_path,
     const char* output_dir,
     const char* external_address);
 
 // Keystore
 StringResult generate_key(
-    const char* user_config_path,
     const char* keystore_path,
     KeyType key_type,
     const char* key_title);
 OperationStatus add_key(
-    const char* user_config_path,
     const char* keystore_path,
     KeyType key_type,
     const char* key_hex,
     const char* key_title);
 OperationStatus remove_key(
-    const char* user_config_path,
     const char* keystore_path,
     const char* key_title);
 

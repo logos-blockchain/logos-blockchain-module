@@ -6,18 +6,17 @@ module blockchain_module {
 
   method start(config_path: tstr, deployment: tstr) -> result
   method stop() -> result
+  method subscribe_to_new_blocks() -> result
+  method subscribe_to_processed_blocks() -> result
+  method subscribe_to_lib_blocks() -> result
   method does_state_exist() -> result
   method purge_state() -> result
   method generate_user_config(json_args: tstr) -> result
-  method update_user_config(user_config_path: tstr, keystore_path: tstr) -> result
-  method migrate_user_config(output_path: tstr, keystore_path: tstr) -> result
-  method migrate_user_config_0_1_2(new_config_path: tstr, old_config_path: tstr, keystore_path: tstr) -> result
-  method participate(config_path: tstr, keystore_path: tstr, output_dir: tstr, external_address: tstr) -> result
-  method generate_key(user_config_path: tstr, keystore_path: tstr, key_type: tstr, key_title: tstr) -> result
-  method add_key(user_config_path: tstr, keystore_path: tstr, key_type: tstr, key_hex: tstr, key_title: tstr) -> result
-  method remove_key(user_config_path: tstr, keystore_path: tstr, key_title: tstr) -> result
+  method participate(config_path: tstr, output_dir: tstr, external_address: tstr) -> result
+  method generate_key(keystore_path: tstr, key_type: tstr, key_title: tstr) -> result
+  method add_key(keystore_path: tstr, key_type: tstr, key_hex: tstr, key_title: tstr) -> result
+  method remove_key(keystore_path: tstr, key_title: tstr) -> result
   method get_peer_id(config_path: tstr) -> result
-  method read_accounts(config_path: tstr) -> result
   method wallet_get_balance(address_hex: tstr) -> result
   method wallet_transfer_funds(change_public_key: tstr, sender_addresses: [tstr], recipient_address: tstr, amount: tstr, optional_tip_hex: tstr) -> result
   method wallet_get_known_addresses() -> result
@@ -48,6 +47,9 @@ module blockchain_module {
   method pow_claim(claim_address_hex: tstr) -> result
   method pow_claimable_rewards() -> result
   method pow_status() -> result
+  method pow_configure(config_path: tstr, config_json: tstr) -> result
+  method read_accounts(config_path: tstr) -> result
+  method read_pow_config(config_path: tstr) -> result
 
   event newBlock(blockJson: tstr)
   event processedBlock(eventJson: tstr)
