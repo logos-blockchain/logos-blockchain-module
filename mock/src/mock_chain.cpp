@@ -1807,7 +1807,48 @@ Bytes32 Node::leaderClaim(Error& err) {
     return enqueue(ops, proofs, reserves);
 }
 
-Bytes32 Node::blendJoin(const std::string& locator, const Bytes32& noteId, Error& err) {
+bool Node::selectServiceNote(Bytes32& out, Error& err) {
+    const std::string key = "blend ZK key " + hex(m_cfg.blendZkKey) + ": ";
+    size_t held = 0;
+    std::vector<const Note*> unlocked;
+    for (auto& [id, n] : m_notes) {
+        if (n.pk != m_cfg.blendZkKey)
+            continue;
+        ++held;
+        if (!n.service)
+            unlocked.push_back(&n);
+    }
+    if (held == 0) {
+        err = {kNotFound, key + "holds no notes"};
+        return false;
+    }
+    if (unlocked.empty()) {
+        err = {kNotFound, key + "all " + std::to_string(held) + " notes are already locked for blend"};
+        return false;
+    }
+    const Note* best = nullptr;
+    uint64_t total = 0, largest = 0;
+    for (const Note* n : unlocked) {
+        total += n->value;
+        largest = std::max(largest, n->value);
+        if (n->value >= m_params.minStake && (!best || n->value < best->value))
+            best = n;
+    }
+    if (best) {
+        out = best->id;
+        return true;
+    }
+    const std::string threshold = std::to_string(m_params.minStake);
+    err = {kNotFound, key + (total >= m_params.minStake
+                                 ? "no single note meets min stake " + threshold + ": largest is " +
+                                       std::to_string(largest) + ", total " + std::to_string(total) +
+                                       "; consolidation may be possible"
+                                 : "insufficient total collateral: " + std::to_string(total) + " < min stake " +
+                                       threshold)};
+    return false;
+}
+
+Bytes32 Node::blendJoin(const std::string& locator, std::optional<Bytes32> requestedNoteId, Error& err) {
     std::lock_guard lock(m_mutex);
     static const std::regex kLocator(R"(^/(ip4|ip6|dns|dns4|dns6)/([^/]+)/udp/(\d{1,5})/quic-v1$)");
     std::smatch m;
@@ -1815,10 +1856,15 @@ Bytes32 Node::blendJoin(const std::string& locator, const Bytes32& noteId, Error
         err = {kValidationError, "`locator` is not a valid locator."};
         return {};
     }
-    if (!validFr(noteId)) {
+    if (requestedNoteId && !validFr(*requestedNoteId)) {
         err = {kValidationError, "Invalid `service_note_id` bytes."};
         return {};
     }
+    Bytes32 noteId{};
+    if (requestedNoteId)
+        noteId = *requestedNoteId;
+    else if (!selectServiceNote(noteId, err))
+        return {};
     const Error closed{kRelayError,
                        "Failed to join blend network: Failed to receive a message from the SDP service: channel closed"};
     if (!m_notes.count(noteId)) {
