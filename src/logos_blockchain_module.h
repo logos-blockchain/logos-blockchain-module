@@ -173,6 +173,8 @@ public:
     [[nodiscard]] StdLogosResult get_channel_state(const std::string& channel_id_hex) const;
 
     // Blend
+    // locked_note_id_hex may be empty: the node then picks the smallest unlocked
+    // note held by its blend ZK key that meets the minimum stake.
     [[nodiscard]] StdLogosResult blend_join_as_core_node(
         const std::string& locator,
         const std::string& locked_note_id_hex

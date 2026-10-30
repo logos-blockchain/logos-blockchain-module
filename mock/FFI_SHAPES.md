@@ -488,7 +488,7 @@ The module renders each of these into JSON or hex. **The FFI never returns JSON 
 - **Locator:** a multiaddr string, e.g. `/ip4/203.0.113.5/udp/3000/quic-v1`, ≤ 329 B.
   - The code rejects an unspecified IP (`0.0.0.0` / `::`) and a `/p2p/` component (`core/src/sdp/mod.rs:189-213`).
   - Bad UTF-8 or a bad parse gives `ValidationError` "`locator` is not valid UTF-8." / "`locator` is not a valid locator.".
-- **`service_note_id`:** Fr LE bytes. Invalid gives `ValidationError` "Invalid `service_note_id` bytes.".
+- **`service_note_id`:** Fr LE bytes. Invalid gives `ValidationError` "Invalid `service_note_id` bytes.". Null lets the node pick the smallest unlocked note held by its blend ZK key that meets the min stake; `NotFound` "blend ZK key …: holds no notes" / "… no single note meets min stake …" when none qualifies.
 - **Flow:** compute the DeclarationId (§0.4), fund from the SDP `funding_pk`, check `max_tx_fee`, sign, mempool, `Ok(id)` (`services/blend/src/lib.rs:294-342`, `services/sdp/src/lib.rs:493-563`, `nodes/node/binary/src/generic_services/sdp/wallet.rs:40-79`).
 - **Synchronous failures** (funding, fee cap, signing because the wallet doesn't own the note, mempool) **drop the reply channel**. That surfaces as a generic `RelayError` "Failed to join blend network: Failed to receive a message from the SDP service: channel closed" (`services/sdp/src/api.rs:17-24`).
 - **Ledger-level rejections** (duplicate declaration/provider/zk id, note < min stake 1e9, note already used, nonexistent note, bad signatures; `core/src/mantle/ops/sdp/mod.rs:22-80`) happen later and are **never reported** back to the caller.
