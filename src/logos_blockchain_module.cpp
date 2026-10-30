@@ -824,6 +824,22 @@ StdLogosResult LogosBlockchainModule::participate(
     return result::from_operation_status(status);
 }
 
+StdLogosResult LogosBlockchainModule::show_config(const std::string& config_path) {
+    const std::string config = localPathFromFileUrl(config_path);
+
+    auto [value, error] = ::show_config(config.c_str());
+    if (!is_ok(&error)) {
+        return result::err(operation_status::take_message(error));
+    }
+
+    std::string out(value);
+    OperationStatus free_status = free_cstring(value);
+    if (!is_ok(&free_status)) {
+        fprintf(stderr, "Failed to free config string: %s\n", operation_status::take_message(free_status).c_str());
+    }
+    return result::ok(std::move(out));
+}
+
 // Keystore
 
 StdLogosResult LogosBlockchainModule::generate_key(

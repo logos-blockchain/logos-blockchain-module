@@ -13,6 +13,7 @@ module blockchain_module {
   method purge_state() -> result
   method generate_user_config(json_args: tstr) -> result
   method participate(config_path: tstr, output_dir: tstr, external_address: tstr) -> result
+  method show_config(config_path: tstr) -> result
   method generate_key(keystore_path: tstr, key_type: tstr, key_title: tstr) -> result
   method add_key(keystore_path: tstr, key_type: tstr, key_hex: tstr, key_title: tstr) -> result
   method remove_key(keystore_path: tstr, key_title: tstr) -> result

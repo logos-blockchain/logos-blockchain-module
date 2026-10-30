@@ -257,6 +257,7 @@ OperationStatus participate(
     const char* config_path,
     const char* output_dir,
     const char* external_address);
+StringResult show_config(const char* config_path);
 
 // Keystore
 StringResult generate_key(
