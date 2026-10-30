@@ -2550,6 +2550,35 @@ LOGOS_TEST(get_peer_id_returns_error_on_ffi_failure) {
 }
 
 // ============================================================================
+// Effective config (show_config)
+// ============================================================================
+
+LOGOS_TEST(show_config_returns_yaml_on_success) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+
+    const std::string yaml = "network:\n  backend:\n    swarm:\n      node_key: <secret>\n";
+    t.mockCFunction("show_config").returns(yaml.c_str());
+    t.mockCFunction("show_config_error").returns(0);
+
+    StdLogosResult result = module.show_config("/tmp/config.yaml");
+    LOGOS_ASSERT_TRUE(result.success);
+    LOGOS_ASSERT_EQ(result.value.get<std::string>(), yaml);
+    LOGOS_ASSERT(t.cFunctionCalled("show_config"));
+    LOGOS_ASSERT(t.cFunctionCalled("free_cstring"));
+}
+
+LOGOS_TEST(show_config_returns_error_on_ffi_failure) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+
+    t.mockCFunction("show_config_error").returns(1);
+
+    StdLogosResult result = module.show_config("/tmp/config.yaml");
+    LOGOS_ASSERT_FALSE(result.success);
+}
+
+// ============================================================================
 // PoW config (pow_configure)
 // ============================================================================
 
