@@ -29,7 +29,7 @@ module blockchain_module {
   method channel_deposit(channel_id_hex: tstr, funding_public_key_hex: tstr, amount: tstr, metadata_hex: tstr, optional_tip_hex: tstr) -> result
   method channel_deposit_with_notes(channel_id_hex: tstr, input_note_id_hexes: [tstr], metadata_hex: tstr, change_public_key_hex: tstr, funding_public_key_hexes: [tstr], max_tx_fee: tstr, optional_tip_hex: tstr) -> result
   method get_channel_state(channel_id_hex: tstr) -> result
-  method blend_join_as_core_node(locator: tstr, locked_note_id_hex: tstr) -> result
+  method blend_join_as_core_node(locator: tstr, optional_service_note_id_hex: tstr) -> result
   method blend_info() -> result
   method get_chain_id() -> result
   method collectOpenMetricsText() -> tstr

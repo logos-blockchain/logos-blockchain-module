@@ -798,7 +798,7 @@ LOGOS_TEST(blend_join_rejects_empty_locator) {
     delete module;
 }
 
-LOGOS_TEST(blend_join_rejects_invalid_locked_note_id) {
+LOGOS_TEST(blend_join_rejects_invalid_service_note_id) {
     auto t = LogosTestContext("blockchain_module");
     TempDir tmpDir;
     auto* module = createStartedModule(t, tmpDir);
@@ -806,7 +806,7 @@ LOGOS_TEST(blend_join_rejects_invalid_locked_note_id) {
 
     StdLogosResult result = module->blend_join_as_core_node("locator1", "short");
     LOGOS_ASSERT_FALSE(result.success);
-    LOGOS_ASSERT_TRUE(contains(result.error, "locked_note_id"));
+    LOGOS_ASSERT_TRUE(contains(result.error, "service_note_id"));
     delete module;
 }
 
@@ -1548,6 +1548,21 @@ LOGOS_TEST(blend_join_as_core_node_returns_declaration_id) {
     LOGOS_ASSERT_EQ(static_cast<int>(declarationId.length()), 64);
     LOGOS_ASSERT_TRUE(declarationId.substr(0, 2) == "cd");
     LOGOS_ASSERT(t.cFunctionCalled("blend_join_as_core_node"));
+    delete module;
+}
+
+LOGOS_TEST(blend_join_as_core_node_lets_the_node_pick_the_note_when_none_is_given) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("blend_join_as_core_node_error").returns(0);
+
+    StdLogosResult result = module->blend_join_as_core_node("locator1", "");
+    LOGOS_ASSERT_TRUE(result.success);
+    LOGOS_ASSERT(t.cFunctionCalled("blend_join_as_core_node_without_note"));
+    LOGOS_ASSERT_FALSE(t.cFunctionCalled("blend_join_as_core_node"));
     delete module;
 }
 
