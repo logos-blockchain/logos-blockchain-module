@@ -798,7 +798,7 @@ LOGOS_TEST(blend_join_rejects_empty_locator) {
     delete module;
 }
 
-LOGOS_TEST(blend_join_rejects_invalid_locked_note_id) {
+LOGOS_TEST(blend_join_rejects_invalid_service_note_id) {
     auto t = LogosTestContext("blockchain_module");
     TempDir tmpDir;
     auto* module = createStartedModule(t, tmpDir);
@@ -806,7 +806,7 @@ LOGOS_TEST(blend_join_rejects_invalid_locked_note_id) {
 
     StdLogosResult result = module->blend_join_as_core_node("locator1", "short");
     LOGOS_ASSERT_FALSE(result.success);
-    LOGOS_ASSERT_TRUE(contains(result.error, "locked_note_id"));
+    LOGOS_ASSERT_TRUE(contains(result.error, "service_note_id"));
     delete module;
 }
 

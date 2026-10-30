@@ -547,8 +547,8 @@ impl BlockchainModuleClient {
         });
     }
 
-    pub fn blend_join_as_core_node(&self, locator: &str, locked_note_id_hex: &str) -> Result<serde_json::Value, LogosError> {
-        let args = serde_json::Value::Array(vec![serde_json::Value::from(locator), serde_json::Value::from(locked_note_id_hex)]);
+    pub fn blend_join_as_core_node(&self, locator: &str, optional_service_note_id_hex: &str) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(locator), serde_json::Value::from(optional_service_note_id_hex)]);
         let value = self.proxy.call_json("blend_join_as_core_node", &args)?;
         Ok(value)
     }
@@ -558,11 +558,11 @@ impl BlockchainModuleClient {
     /// client's `blend_join_as_core_nodeAsync`. The callback runs from the protocol
     /// completion path (the module's Qt event loop), so it fires after
     /// the current method returns, never inline.
-    pub fn blend_join_as_core_node_async<F>(&self, locator: &str, locked_note_id_hex: &str, callback: F)
+    pub fn blend_join_as_core_node_async<F>(&self, locator: &str, optional_service_note_id_hex: &str, callback: F)
     where
         F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
     {
-        let args = serde_json::Value::Array(vec![serde_json::Value::from(locator), serde_json::Value::from(locked_note_id_hex)]);
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(locator), serde_json::Value::from(optional_service_note_id_hex)]);
         self.proxy.call_json_async("blend_join_as_core_node", &args, move |result| {
             callback(result.and_then(|value| Ok(value)));
         });
