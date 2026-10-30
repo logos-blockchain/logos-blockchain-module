@@ -139,30 +139,36 @@ sections:
           path and the module resolves it under the instance's persistence
           directory and returns the absolute path it wrote.
 
-      - title: "Confirm skip_ibd emptied the peer list"
+      - title: "Confirm skip_ibd left no peers to sync from"
         text: |
-          `skip_ibd` writes an empty IBD peer list into the config, which is what
-          makes the node skip bootstrap rather than try to sync:
-        run: "CFG=$(find ./session -name user_config.yaml -path '*blockchain_module*' 2>/dev/null | head -1); echo using $CFG; grep -A1 'ibd:' $CFG"
+          Since node 0.3.3 a generated config is sparse: it carries only what
+          differs from the deployment's defaults, so `skip_ibd` shows up as the
+          *absence* of any IBD peer list rather than an empty one. The node then
+          skips bootstrap rather than try to sync:
+        run: "CFG=$(find ./session -name user_config.yaml -path '*blockchain_module*' 2>/dev/null | head -1); echo using $CFG; grep -c 'peers' $CFG || echo 'no peers configured'"
         code_block: |
-          grep -A1 'ibd:' <generated>/user_config.yaml
+          grep -c 'peers' <generated>/user_config.yaml || echo 'no peers configured'
         expect_contains:
-          - "peers: []"
+          - "no peers configured"
 
       - title: "Shorten the bootstrap period"
         text: |
-          A generated config carries `prolonged_bootstrap_period: '3600.000000000'`
-          — the node stays in `Bootstrapping` mode for a full hour before
-          switching to `Online`. That is sensible for joining a real network and
-          useless for a test, so patch it down. `generate_user_config` does not
-          expose this knob, so we edit the YAML directly.
-        run: "CFG=$(find ./session -name user_config.yaml -path '*blockchain_module*' 2>/dev/null | head -1); sed \"s/prolonged_bootstrap_period: '3600.000000000'/prolonged_bootstrap_period: '5.000000000'/\" $CFG > $CFG.tmp && mv $CFG.tmp $CFG && grep -n prolonged_bootstrap_period $CFG"
+          The node's default `prolonged_bootstrap_period` is an hour: it stays in
+          `Bootstrapping` mode for that long before switching to `Online`. That
+          is sensible for joining a real network and useless for a test, so
+          override it. `generate_user_config` does not expose this knob, and a
+          sparse config omits it, so append the override to the YAML directly.
+          Durations are written in humantime form (`5s`, `10m`, `1h`).
+        run: "CFG=$(find ./session -name user_config.yaml -path '*blockchain_module*' 2>/dev/null | head -1); printf 'cryptarchia:\\n  service:\\n    bootstrap:\\n      prolonged_bootstrap_period: 5s\\n' >> $CFG && grep -n prolonged_bootstrap_period $CFG"
         code_block: |
-          # sed -i differs between GNU and BSD/macOS, so write and move instead.
-          sed "s/prolonged_bootstrap_period: '3600.000000000'/prolonged_bootstrap_period: '5.000000000'/" \
-            <generated>/user_config.yaml > tmp && mv tmp <generated>/user_config.yaml
+          cat >> <generated>/user_config.yaml <<'EOF'
+          cryptarchia:
+            service:
+              bootstrap:
+                prolonged_bootstrap_period: 5s
+          EOF
         expect_contains:
-          - "prolonged_bootstrap_period: '5.000000000'"
+          - "prolonged_bootstrap_period: 5s"
 
   - title: "Start the node"
     step: true

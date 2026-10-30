@@ -63,54 +63,29 @@ public:
     // base when flagged. On success the result value is the path the config was
     // written to — pass it straight to start().
     [[nodiscard]] StdLogosResult generate_user_config(const std::string& json_args) const;
-    [[nodiscard]] static StdLogosResult update_user_config(
-        const std::string& user_config_path,
-        const std::string& keystore_path
-    );
-    [[nodiscard]] static StdLogosResult migrate_user_config(
-        const std::string& output_path,
-        const std::string& keystore_path
-    );
-    [[nodiscard]] static StdLogosResult migrate_user_config_0_1_2(
-        const std::string& new_config_path,
-        const std::string& old_config_path,
-        const std::string& keystore_path
-    );
-    // Merges source_path, then extra_yaml (optional, empty to skip), onto destination_path; overwriting it.
-    // Maps merge key by key; lists and tagged values are replaced whole.
-    // The flags insert keys missing from the destination instead of reporting them.
-    // On success the result value is the conflicts report (one per line), empty when there are none.
-    [[nodiscard]] static StdLogosResult merge_user_config(
-        const std::string& source_path,
-        const std::string& destination_path,
-        const std::string& extra_yaml,
-        bool source_insert_missing,
-        bool extra_insert_missing
-    );
+    // The keystore is named by the config, so only the config path is needed.
     [[nodiscard]] static StdLogosResult participate(
         const std::string& config_path,
-        const std::string& keystore_path,
         const std::string& output_dir,
         const std::string& external_address
     );
 
     // Keystore
+    // The keystore stands alone since node 0.3.3: the config no longer lists its
+    // keys, so these take only the keystore path.
     // key_type is "ed25519" or "zk". key_title may be empty (auto-generated).
     [[nodiscard]] static StdLogosResult generate_key(
-        const std::string& user_config_path,
         const std::string& keystore_path,
         const std::string& key_type,
         const std::string& key_title
     );
     [[nodiscard]] static StdLogosResult add_key(
-        const std::string& user_config_path,
         const std::string& keystore_path,
         const std::string& key_type,
         const std::string& key_hex,
         const std::string& key_title
     );
     [[nodiscard]] static StdLogosResult remove_key(
-        const std::string& user_config_path,
         const std::string& keystore_path,
         const std::string& key_title
     );

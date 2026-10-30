@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <unistd.h>
 #include <vector>
@@ -93,8 +94,6 @@ extern std::string g_lastGeneratedOutput;
 extern std::string g_lastGeneratedStatePath;
 extern std::string g_lastGeneratedStoragePath;
 extern std::string g_lastGeneratedLogsPath;
-extern std::string g_lastMergeExtraYaml;
-extern MergeConfigFlags g_lastMergeFlags;
 
 static void clearGeneratedPaths() {
     g_lastGeneratedOutput.clear();
@@ -2408,113 +2407,13 @@ LOGOS_TEST(stream_events_not_delivered_after_stop) {
 // Config management (operate on file paths, no running node required)
 // ============================================================================
 
-LOGOS_TEST(update_user_config_returns_0_on_success) {
-    auto t = LogosTestContext("blockchain_module");
-    LogosBlockchainModule module;
-
-    t.mockCFunction("update_user_config").returns(0);
-
-    LOGOS_ASSERT_TRUE(module.update_user_config("/tmp/config.yaml", "/tmp/keystore.yaml").success);
-    LOGOS_ASSERT(t.cFunctionCalled("update_user_config"));
-}
-
-LOGOS_TEST(update_user_config_returns_1_on_failure) {
-    auto t = LogosTestContext("blockchain_module");
-    LogosBlockchainModule module;
-
-    t.mockCFunction("update_user_config").returns(1);
-
-    LOGOS_ASSERT_FALSE(module.update_user_config("/tmp/config.yaml", "/tmp/keystore.yaml").success);
-}
-
-LOGOS_TEST(migrate_user_config_returns_0_on_success) {
-    auto t = LogosTestContext("blockchain_module");
-    LogosBlockchainModule module;
-
-    t.mockCFunction("migrate_user_config").returns(0);
-
-    LOGOS_ASSERT_TRUE(module.migrate_user_config("/tmp/out.yaml", "/tmp/keystore.yaml").success);
-    LOGOS_ASSERT(t.cFunctionCalled("migrate_user_config"));
-}
-
-LOGOS_TEST(migrate_user_config_returns_1_on_failure) {
-    auto t = LogosTestContext("blockchain_module");
-    LogosBlockchainModule module;
-
-    t.mockCFunction("migrate_user_config").returns(1);
-
-    LOGOS_ASSERT_FALSE(module.migrate_user_config("/tmp/out.yaml", "/tmp/keystore.yaml").success);
-}
-
-LOGOS_TEST(migrate_user_config_0_1_2_returns_0_on_success) {
-    auto t = LogosTestContext("blockchain_module");
-    LogosBlockchainModule module;
-
-    t.mockCFunction("migrate_user_config_0_1_2").returns(0);
-
-    LOGOS_ASSERT_TRUE(module.migrate_user_config_0_1_2("/tmp/new.yaml", "/tmp/old.yaml", "/tmp/keystore.yaml").success);
-    LOGOS_ASSERT(t.cFunctionCalled("migrate_user_config_0_1_2"));
-}
-
-LOGOS_TEST(migrate_user_config_0_1_2_returns_1_on_failure) {
-    auto t = LogosTestContext("blockchain_module");
-    LogosBlockchainModule module;
-
-    t.mockCFunction("migrate_user_config_0_1_2").returns(1);
-
-    LOGOS_ASSERT_FALSE(module.migrate_user_config_0_1_2("/tmp/new.yaml", "/tmp/old.yaml", "/tmp/keystore.yaml").success);
-}
-
-LOGOS_TEST(merge_user_config_returns_empty_report_without_conflicts) {
-    auto t = LogosTestContext("blockchain_module");
-    LogosBlockchainModule module;
-
-    t.mockCFunction("merge_user_config").returns("");
-    t.mockCFunction("merge_user_config_error").returns(0);
-
-    StdLogosResult result = module.merge_user_config("/tmp/src.yaml", "/tmp/dst.yaml", "", false, false);
-    LOGOS_ASSERT_TRUE(result.success);
-    LOGOS_ASSERT_EQ(result.value.get<std::string>(), std::string(""));
-    LOGOS_ASSERT(t.cFunctionCalled("merge_user_config"));
-    LOGOS_ASSERT_EQ(g_lastMergeExtraYaml, std::string("<null>"));
-    LOGOS_ASSERT_FALSE(t.cFunctionCalled("free_cstring"));
-}
-
-LOGOS_TEST(merge_user_config_returns_conflicts_report) {
-    auto t = LogosTestContext("blockchain_module");
-    LogosBlockchainModule module;
-
-    t.mockCFunction("merge_user_config").returns("a.b: missing in destination\nc: missing in destination");
-    t.mockCFunction("merge_user_config_error").returns(0);
-
-    StdLogosResult result = module.merge_user_config("/tmp/src.yaml", "/tmp/dst.yaml", "c: 3", true, false);
-    LOGOS_ASSERT_TRUE(result.success);
-    LOGOS_ASSERT_EQ(
-        result.value.get<std::string>(),
-        std::string("a.b: missing in destination\nc: missing in destination")
-    );
-    LOGOS_ASSERT_EQ(g_lastMergeExtraYaml, std::string("c: 3"));
-    LOGOS_ASSERT_TRUE(g_lastMergeFlags.source_insert_missing);
-    LOGOS_ASSERT_FALSE(g_lastMergeFlags.extra_insert_missing);
-    LOGOS_ASSERT(t.cFunctionCalled("free_cstring"));
-}
-
-LOGOS_TEST(merge_user_config_returns_error_on_ffi_failure) {
-    auto t = LogosTestContext("blockchain_module");
-    LogosBlockchainModule module;
-
-    t.mockCFunction("merge_user_config_error").returns(1);
-
-    LOGOS_ASSERT_FALSE(module.merge_user_config("/tmp/src.yaml", "/tmp/dst.yaml", "", false, false).success);
-}
-
 LOGOS_TEST(participate_returns_0_on_success) {
     auto t = LogosTestContext("blockchain_module");
     LogosBlockchainModule module;
 
     t.mockCFunction("participate").returns(0);
 
-    LOGOS_ASSERT_TRUE(module.participate("/tmp/config.yaml", "/tmp/keystore.yaml", "/tmp/out", "").success);
+    LOGOS_ASSERT_TRUE(module.participate("/tmp/config.yaml", "/tmp/out", "").success);
     LOGOS_ASSERT(t.cFunctionCalled("participate"));
 }
 
@@ -2524,7 +2423,7 @@ LOGOS_TEST(participate_returns_1_on_failure) {
 
     t.mockCFunction("participate").returns(1);
 
-    LOGOS_ASSERT_FALSE(module.participate("/tmp/config.yaml", "/tmp/keystore.yaml", "/tmp/out", "1.2.3.4").success);
+    LOGOS_ASSERT_FALSE(module.participate("/tmp/config.yaml", "/tmp/out", "1.2.3.4").success);
 }
 
 // ============================================================================
@@ -2538,7 +2437,7 @@ LOGOS_TEST(generate_key_returns_id_on_success) {
     t.mockCFunction("generate_key").returns("key-abc123");
     t.mockCFunction("generate_key_error").returns(0);
 
-    StdLogosResult result = module.generate_key("/tmp/config.yaml", "/tmp/keystore.yaml", "ed25519", "");
+    StdLogosResult result = module.generate_key("/tmp/keystore.yaml", "ed25519", "");
     LOGOS_ASSERT_TRUE(result.success);
     LOGOS_ASSERT_EQ(result.value.get<std::string>(), std::string("key-abc123"));
     LOGOS_ASSERT(t.cFunctionCalled("generate_key"));
@@ -2552,7 +2451,7 @@ LOGOS_TEST(generate_key_accepts_zk_type) {
     t.mockCFunction("generate_key").returns("zk-key");
     t.mockCFunction("generate_key_error").returns(0);
 
-    StdLogosResult result = module.generate_key("/tmp/config.yaml", "/tmp/keystore.yaml", "ZK", "my-title");
+    StdLogosResult result = module.generate_key("/tmp/keystore.yaml", "ZK", "my-title");
     LOGOS_ASSERT_EQ(result.value.get<std::string>(), std::string("zk-key"));
 }
 
@@ -2560,7 +2459,7 @@ LOGOS_TEST(generate_key_rejects_invalid_key_type) {
     auto t = LogosTestContext("blockchain_module");
     LogosBlockchainModule module;
 
-    StdLogosResult result = module.generate_key("/tmp/config.yaml", "/tmp/keystore.yaml", "rsa", "");
+    StdLogosResult result = module.generate_key("/tmp/keystore.yaml", "rsa", "");
     LOGOS_ASSERT_FALSE(result.success);
     LOGOS_ASSERT_TRUE(contains(result.error, "key_type"));
     LOGOS_ASSERT_FALSE(t.cFunctionCalled("generate_key"));
@@ -2572,7 +2471,7 @@ LOGOS_TEST(generate_key_returns_error_on_ffi_failure) {
 
     t.mockCFunction("generate_key_error").returns(1);
 
-    StdLogosResult result = module.generate_key("/tmp/config.yaml", "/tmp/keystore.yaml", "ed25519", "");
+    StdLogosResult result = module.generate_key("/tmp/keystore.yaml", "ed25519", "");
     LOGOS_ASSERT_FALSE(result.success);
 }
 
@@ -2582,7 +2481,7 @@ LOGOS_TEST(add_key_returns_0_on_success) {
 
     t.mockCFunction("add_key").returns(0);
 
-    LOGOS_ASSERT_TRUE(module.add_key("/tmp/config.yaml", "/tmp/keystore.yaml", "ed25519", VALID_HEX, "").success);
+    LOGOS_ASSERT_TRUE(module.add_key("/tmp/keystore.yaml", "ed25519", VALID_HEX, "").success);
     LOGOS_ASSERT(t.cFunctionCalled("add_key"));
 }
 
@@ -2590,7 +2489,7 @@ LOGOS_TEST(add_key_rejects_invalid_key_type) {
     auto t = LogosTestContext("blockchain_module");
     LogosBlockchainModule module;
 
-    LOGOS_ASSERT_FALSE(module.add_key("/tmp/config.yaml", "/tmp/keystore.yaml", "bogus", VALID_HEX, "").success);
+    LOGOS_ASSERT_FALSE(module.add_key("/tmp/keystore.yaml", "bogus", VALID_HEX, "").success);
     LOGOS_ASSERT_FALSE(t.cFunctionCalled("add_key"));
 }
 
@@ -2600,7 +2499,7 @@ LOGOS_TEST(add_key_returns_1_on_failure) {
 
     t.mockCFunction("add_key").returns(1);
 
-    LOGOS_ASSERT_FALSE(module.add_key("/tmp/config.yaml", "/tmp/keystore.yaml", "zk", VALID_HEX, "title").success);
+    LOGOS_ASSERT_FALSE(module.add_key("/tmp/keystore.yaml", "zk", VALID_HEX, "title").success);
 }
 
 LOGOS_TEST(remove_key_returns_0_on_success) {
@@ -2609,7 +2508,7 @@ LOGOS_TEST(remove_key_returns_0_on_success) {
 
     t.mockCFunction("remove_key").returns(0);
 
-    LOGOS_ASSERT_TRUE(module.remove_key("/tmp/config.yaml", "/tmp/keystore.yaml", "my-key").success);
+    LOGOS_ASSERT_TRUE(module.remove_key("/tmp/keystore.yaml", "my-key").success);
     LOGOS_ASSERT(t.cFunctionCalled("remove_key"));
 }
 
@@ -2619,7 +2518,7 @@ LOGOS_TEST(remove_key_returns_1_on_failure) {
 
     t.mockCFunction("remove_key").returns(1);
 
-    LOGOS_ASSERT_FALSE(module.remove_key("/tmp/config.yaml", "/tmp/keystore.yaml", "my-key").success);
+    LOGOS_ASSERT_FALSE(module.remove_key("/tmp/keystore.yaml", "my-key").success);
 }
 
 // ============================================================================
@@ -2709,6 +2608,17 @@ static std::string readFileText(const std::string& path) {
     return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
 }
 
+// The pow section as the file now holds it, in the shape pow_configure takes.
+static nlohmann::json readPow(const std::string& config) {
+    const StdLogosResult result = LogosBlockchainModule::read_pow_config(config);
+    if (!result.success) return nlohmann::json();
+    return nlohmann::json::parse(result.value.get<std::string>());
+}
+
+static nlohmann::json target(const std::string& public_key, const std::string& threshold) {
+    return nlohmann::json{{"public_key", public_key}, {"threshold", threshold}};
+}
+
 // Empty target = the leader's funding key: PoS stakes from it, so paying mined
 // rewards there is what turns mining into stake.
 LOGOS_TEST(pow_configure_defaults_an_empty_key_to_the_leader_funding_key) {
@@ -2716,8 +2626,6 @@ LOGOS_TEST(pow_configure_defaults_an_empty_key_to_the_leader_funding_key) {
     TempDir tmpDir;
     LOGOS_ASSERT_TRUE(tmpDir.isValid());
     const std::string config = writeGeneratedConfig(tmpDir);
-    t.mockCFunction("merge_user_config").returns("");
-    t.mockCFunction("merge_user_config_error").returns(0);
 
     StdLogosResult result = LogosBlockchainModule::pow_configure(
         config, R"({"auto_claim_targets": [{"public_key": "", "threshold": 100000000}]})"
@@ -2725,14 +2633,12 @@ LOGOS_TEST(pow_configure_defaults_an_empty_key_to_the_leader_funding_key) {
     LOGOS_ASSERT_TRUE(result.success);
 
     // The empty key resolved to the leader's funding key, read out of the config.
-    LOGOS_ASSERT_EQ(
-        g_lastMergeExtraYaml,
-        "pow:\n  auto_claim:\n    targets:\n    - public_key: " + LEADER_FUNDING_PK +
-            "\n      threshold: 100000000\n"
-    );
-    // Nothing else is named, so merge leaves the rest of pow untouched.
-    LOGOS_ASSERT_FALSE(contains(g_lastMergeExtraYaml, "mining"));
-    LOGOS_ASSERT_FALSE(contains(g_lastMergeExtraYaml, "tick"));
+    const nlohmann::json pow = readPow(config);
+    LOGOS_ASSERT_EQ(pow["auto_claim_targets"], nlohmann::json::array({target(LEADER_FUNDING_PK, "100000000")}));
+    // Nothing else is named, so the rest of pow is left as it was.
+    LOGOS_ASSERT_TRUE(pow["max_threads"].is_null());
+    LOGOS_ASSERT_EQ(pow["max_tickets_per_block"], nlohmann::json("4"));
+    LOGOS_ASSERT_EQ(pow["tick_seconds"], nlohmann::json("300"));
 }
 
 // A 0x prefix and upper case are normalised, so the written target matches the
@@ -2741,8 +2647,6 @@ LOGOS_TEST(pow_configure_normalises_an_explicit_target) {
     auto t = LogosTestContext("blockchain_module");
     TempDir tmpDir;
     const std::string config = writeGeneratedConfig(tmpDir);
-    t.mockCFunction("merge_user_config").returns("");
-    t.mockCFunction("merge_user_config_error").returns(0);
 
     const std::string upper = "0x" + []() {
         std::string s = SDP_FUNDING_PK;
@@ -2755,8 +2659,8 @@ LOGOS_TEST(pow_configure_normalises_an_explicit_target) {
     ).success);
 
     // Written in the form the node's own config uses: lower case, no 0x.
-    LOGOS_ASSERT_TRUE(contains(g_lastMergeExtraYaml, "- public_key: " + SDP_FUNDING_PK));
-    LOGOS_ASSERT_FALSE(contains(g_lastMergeExtraYaml, "0x"));
+    LOGOS_ASSERT_EQ(readPow(config)["auto_claim_targets"], nlohmann::json::array({target(SDP_FUNDING_PK, "1")}));
+    LOGOS_ASSERT_FALSE(contains(readFileText(config), "0x"));
 }
 
 // The node aborts startup on a target the wallet does not track, so catching it
@@ -2794,46 +2698,50 @@ LOGOS_TEST(pow_configure_replaces_an_existing_target) {
     auto t = LogosTestContext("blockchain_module");
     TempDir tmpDir;
     const std::string config = writeGeneratedConfig(tmpDir);
-    t.mockCFunction("merge_user_config").returns("");
-    t.mockCFunction("merge_user_config_error").returns(0);
 
     LOGOS_ASSERT_TRUE(LogosBlockchainModule::pow_configure(
         config, R"({"auto_claim_targets": [{"public_key": "", "threshold": 100000000}]})"
     ).success);
-    const std::string once = g_lastMergeExtraYaml;
+    const std::string once = readFileText(config);
 
     LOGOS_ASSERT_TRUE(LogosBlockchainModule::pow_configure(
         config, R"({"auto_claim_targets": [{"public_key": "", "threshold": 100000000}]})"
     ).success);
-    LOGOS_ASSERT_EQ(g_lastMergeExtraYaml, once);
+    LOGOS_ASSERT_EQ(readFileText(config), once);
 
     LOGOS_ASSERT_TRUE(LogosBlockchainModule::pow_configure(
         config, R"({"auto_claim_targets": [{"public_key": ")" + SDP_FUNDING_PK + R"(", "threshold": 5}]})"
     ).success);
     // A list is replaced whole, so the new target is the only one named.
-    LOGOS_ASSERT_TRUE(contains(g_lastMergeExtraYaml, "- public_key: " + SDP_FUNDING_PK));
-    LOGOS_ASSERT_FALSE(contains(g_lastMergeExtraYaml, "- public_key: " + LEADER_FUNDING_PK));
+    LOGOS_ASSERT_EQ(readPow(config)["auto_claim_targets"], nlohmann::json::array({target(SDP_FUNDING_PK, "5")}));
+    LOGOS_ASSERT_FALSE(contains(readFileText(config), "- public_key: " + LEADER_FUNDING_PK));
 }
 
-// A config written before the node had a pow section still gets one, appended
-// as a new top-level block so no existing line moves.
+// A config written before the node had a pow section still gets one, and the
+// rewrite keeps everything else: the KMS section's local tags included.
 LOGOS_TEST(pow_configure_adds_a_missing_pow_section) {
     auto t = LogosTestContext("blockchain_module");
     TempDir tmpDir;
-    const std::string config = writeGeneratedConfig(tmpDir);
-    t.mockCFunction("merge_user_config").returns("");
-    t.mockCFunction("merge_user_config_error").returns(0);
+    const std::string config = tmpDir.filePath("user_config.yaml");
+    const std::string text = GENERATED_CONFIG;
+    const size_t pow_at = text.find("pow:\n");
+    const size_t state_at = text.find("state:\n");
+    LOGOS_ASSERT_TRUE(pow_at != std::string::npos && state_at != std::string::npos);
+    std::ofstream(config) << text.substr(0, pow_at) + text.substr(state_at);
+    LOGOS_ASSERT_FALSE(contains(readFileText(config), "pow:"));
 
     LOGOS_ASSERT_TRUE(LogosBlockchainModule::pow_configure(
         config, R"({"auto_claim_targets": [{"public_key": "", "threshold": 100000000}]})"
     ).success);
 
-    // A config with no pow section is not an error: extra_insert_missing is what
-    // makes merge create it rather than report it as a conflict. source_insert
-    // stays off so the config is never merged onto itself key by key.
-    LOGOS_ASSERT_TRUE(g_lastMergeFlags.extra_insert_missing);
-    LOGOS_ASSERT_FALSE(g_lastMergeFlags.source_insert_missing);
-    LOGOS_ASSERT_TRUE(contains(g_lastMergeExtraYaml, "pow:\n"));
+    const std::string after = readFileText(config);
+    LOGOS_ASSERT_TRUE(contains(after, "pow:\n"));
+    LOGOS_ASSERT_EQ(
+        readPow(config)["auto_claim_targets"], nlohmann::json::array({target(LEADER_FUNDING_PK, "100000000")})
+    );
+    LOGOS_ASSERT_TRUE(contains(after, "!Zk 23224f5a"));
+    LOGOS_ASSERT_TRUE(contains(after, "- 12D3KooWFoo"));
+    LOGOS_ASSERT_TRUE(contains(after, "path: null"));
 }
 
 LOGOS_TEST(pow_configure_fails_on_a_missing_config) {
@@ -2850,12 +2758,15 @@ LOGOS_TEST(pow_configure_caps_the_search_pool) {
     auto t = LogosTestContext("blockchain_module");
     TempDir tmpDir;
     const std::string config = writeGeneratedConfig(tmpDir);
-    t.mockCFunction("merge_user_config").returns("");
-    t.mockCFunction("merge_user_config_error").returns(0);
 
     LOGOS_ASSERT_TRUE(LogosBlockchainModule::pow_configure(config, R"({"max_threads": 1})").success);
-    LOGOS_ASSERT_EQ(g_lastMergeExtraYaml, std::string("pow:\n  mining:\n    max_threads: 1\n"));
-    LOGOS_ASSERT_FALSE(contains(g_lastMergeExtraYaml, "null"));
+    LOGOS_ASSERT_EQ(readPow(config)["max_threads"], nlohmann::json("1"));
+    LOGOS_ASSERT_FALSE(contains(readFileText(config), "max_threads: null"));
+
+    // null is a real value: one thread per logical CPU.
+    LOGOS_ASSERT_TRUE(LogosBlockchainModule::pow_configure(config, R"({"max_threads": null})").success);
+    LOGOS_ASSERT_TRUE(readPow(config)["max_threads"].is_null());
+    LOGOS_ASSERT_TRUE(contains(readFileText(config), "max_threads: null"));
 }
 
 // The node types these as NonZeroUsize: a 0 would only surface as a
@@ -2879,8 +2790,6 @@ LOGOS_TEST(pow_configure_writes_every_setting_in_one_pass) {
     auto t = LogosTestContext("blockchain_module");
     TempDir tmpDir;
     const std::string config = writeGeneratedConfig(tmpDir);
-    t.mockCFunction("merge_user_config").returns("");
-    t.mockCFunction("merge_user_config_error").returns(0);
 
     const std::string payload = R"({
         "max_threads": 1,
@@ -2893,24 +2802,21 @@ LOGOS_TEST(pow_configure_writes_every_setting_in_one_pass) {
     })";
     LOGOS_ASSERT_TRUE(LogosBlockchainModule::pow_configure(config, payload).success);
 
-    // One merge carries the whole section, so a rejected field could not have
-    // left the accepted ones applied.
-    LOGOS_ASSERT_EQ(
-        g_lastMergeExtraYaml,
-        "pow:\n"
-        "  mining:\n"
-        "    max_threads: 1\n"
-        "    max_tickets_per_block: 2\n"
-        "  auto_claim:\n"
-        "    tick:\n"
-        "      unit: seconds\n"
-        "      value: 120\n"
-        "    targets:\n"
-        "    - public_key: " + LEADER_FUNDING_PK + "\n"
-        "      threshold: 100\n"
-        "    - public_key: " + SDP_FUNDING_PK + "\n"
-        "      threshold: 18446744073709551615\n"
-    );
+    const nlohmann::json expected{
+        {"max_threads", "1"},
+        {"max_tickets_per_block", "2"},
+        {"tick_seconds", "120"},
+        {"auto_claim_targets",
+         nlohmann::json::array({target(LEADER_FUNDING_PK, "100"), target(SDP_FUNDING_PK, "18446744073709551615")})},
+    };
+    LOGOS_ASSERT_EQ(readPow(config), expected);
+
+    // The pow section is written in the shape the node's own config uses, and
+    // the sections around it survive the rewrite, tags included.
+    const std::string after = readFileText(config);
+    LOGOS_ASSERT_TRUE(contains(after, "    tick:\n      unit: seconds\n      value: 120\n"));
+    LOGOS_ASSERT_TRUE(contains(after, "!Zk 23224f5a"));
+    LOGOS_ASSERT_TRUE(contains(after, "- 12D3KooWFoo"));
 }
 
 // An absent field is not the same as a zero one: it leaves that part alone, so
@@ -2919,22 +2825,24 @@ LOGOS_TEST(pow_configure_leaves_omitted_fields_alone) {
     auto t = LogosTestContext("blockchain_module");
     TempDir tmpDir;
     const std::string config = writeGeneratedConfig(tmpDir);
-    t.mockCFunction("merge_user_config").returns("");
-    t.mockCFunction("merge_user_config_error").returns(0);
 
     LOGOS_ASSERT_TRUE(LogosBlockchainModule::pow_configure(
         config, R"({"max_threads": 4, "max_tickets_per_block": 2, "tick_seconds": 120})"
     ).success);
-    // Targets were never mentioned, so merge cannot touch the existing list.
-    LOGOS_ASSERT_FALSE(contains(g_lastMergeExtraYaml, "targets"));
+    // Targets were never mentioned, so the existing (empty) list is untouched.
+    nlohmann::json pow = readPow(config);
+    LOGOS_ASSERT_EQ(pow["auto_claim_targets"], nlohmann::json::array());
+    LOGOS_ASSERT_EQ(pow["max_threads"], nlohmann::json("4"));
 
     LOGOS_ASSERT_TRUE(LogosBlockchainModule::pow_configure(
         config, R"({"auto_claim_targets": [{"public_key": "", "threshold": 7}]})"
     ).success);
     // ...and a targets-only write names no mining key, so those survive too.
-    LOGOS_ASSERT_FALSE(contains(g_lastMergeExtraYaml, "mining"));
-    LOGOS_ASSERT_FALSE(contains(g_lastMergeExtraYaml, "tick"));
-    LOGOS_ASSERT_TRUE(contains(g_lastMergeExtraYaml, "- public_key: " + LEADER_FUNDING_PK));
+    pow = readPow(config);
+    LOGOS_ASSERT_EQ(pow["max_threads"], nlohmann::json("4"));
+    LOGOS_ASSERT_EQ(pow["max_tickets_per_block"], nlohmann::json("2"));
+    LOGOS_ASSERT_EQ(pow["tick_seconds"], nlohmann::json("120"));
+    LOGOS_ASSERT_EQ(pow["auto_claim_targets"], nlohmann::json::array({target(LEADER_FUNDING_PK, "7")}));
 }
 
 // An empty list is how auto-claim is turned off: the node arms it at startup
@@ -2943,8 +2851,10 @@ LOGOS_TEST(pow_configure_clears_the_target_list) {
     auto t = LogosTestContext("blockchain_module");
     TempDir tmpDir;
     const std::string config = writeGeneratedConfig(tmpDir);
-    t.mockCFunction("merge_user_config").returns("");
-    t.mockCFunction("merge_user_config_error").returns(0);
+    LOGOS_ASSERT_TRUE(LogosBlockchainModule::pow_configure(
+        config, R"({"auto_claim_targets": [{"public_key": "", "threshold": 7}]})"
+    ).success);
+    LOGOS_ASSERT_TRUE(contains(readFileText(config), "public_key"));
 
     StdLogosResult result =
         LogosBlockchainModule::pow_configure(config, R"({"auto_claim_targets": []})");
@@ -2952,10 +2862,9 @@ LOGOS_TEST(pow_configure_clears_the_target_list) {
 
     // An empty list is how auto-claim is turned off, and a list is replaced
     // whole, so this clears whatever the config held.
-    LOGOS_ASSERT_EQ(
-        g_lastMergeExtraYaml, std::string("pow:\n  auto_claim:\n    targets: []\n")
-    );
-    LOGOS_ASSERT_FALSE(contains(g_lastMergeExtraYaml, "public_key"));
+    LOGOS_ASSERT_EQ(readPow(config)["auto_claim_targets"], nlohmann::json::array());
+    LOGOS_ASSERT_TRUE(contains(readFileText(config), "targets: []"));
+    LOGOS_ASSERT_FALSE(contains(readFileText(config), "public_key"));
 }
 
 // Every field is validated before the file is touched, so one bad target does
@@ -3108,6 +3017,47 @@ LOGOS_TEST(read_accounts_never_reports_secret_keys) {
     LOGOS_ASSERT_FALSE(contains(json, "Ed25519"));
 }
 
+// Since node 0.3.3 a config holds only what differs from the defaults, and the
+// keys live in the keystore alone. The reader puts the keystore's values
+// underneath the file, so a sparse config lists its accounts like a full one
+// and an auto-claim target still defaults to the leader's funding key.
+static const char* const SPARSE_KEYSTORE = R"(public_keys:
+  LeaderFunding: 39e16b432574571a6bcd8ee36e370589641bd9f35367f6f97a972453c46c3225
+  NetworkSwarm: 9750fa86471fddc69749aa9f8568ef6635e64d9f9aa815e8cb932cea183c8e18
+  VaucherMaster: 5a28a06daa1320faddef1be9429f550d7bebce09b96cc19a4943600b839b5619
+secret_keys:
+  LeaderFunding: !Zk 1111111111111111111111111111111111111111111111111111111111111111
+  NetworkSwarm: !Ed25519 2222222222222222222222222222222222222222222222222222222222222222
+  VaucherMaster: !Zk 3333333333333333333333333333333333333333333333333333333333333333
+)";
+
+LOGOS_TEST(read_accounts_fills_in_what_a_sparse_config_leaves_to_the_keystore) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    const std::string config = tmpDir.filePath("user_config.yaml");
+    std::ofstream(config) << "network:\n  backend:\n    initial_peers: []\n";
+    writeKeystore(tmpDir, SPARSE_KEYSTORE);
+
+    const StdLogosResult result = LogosBlockchainModule().read_accounts(config);
+    LOGOS_ASSERT_TRUE(result.success);
+    const std::string json = result.value.get<std::string>();
+    // The zk keys are the wallet's accounts; the swarm key is not one.
+    LOGOS_ASSERT_TRUE(contains(json, "\"public_key\":\"39e16b43"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"public_key\":\"5a28a06d"));
+    LOGOS_ASSERT_FALSE(contains(json, "\"public_key\":\"9750fa86"));
+    LOGOS_ASSERT_TRUE(contains(json, "leader_funding"));
+    LOGOS_ASSERT_TRUE(contains(json, "voucher_master"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"title\":\"LeaderFunding\""));
+
+    LOGOS_ASSERT_TRUE(LogosBlockchainModule::pow_configure(
+        config, R"({"auto_claim_targets": [{"public_key": "", "threshold": 1}]})"
+    ).success);
+    const std::string written = readFileText(config);
+    LOGOS_ASSERT_TRUE(contains(written, "public_key: 39e16b43"));
+    // What the keystore provides is read, never written back.
+    LOGOS_ASSERT_FALSE(contains(written, "known_keys"));
+}
+
 // The pow half mirrors pow_configure's input, so the wizard pre-fills from it.
 // A generated config carries a target already, which is how the step knows
 // auto-claim is on before the user touches anything.
@@ -3115,15 +3065,12 @@ LOGOS_TEST(read_pow_config_reports_the_current_section) {
     auto t = LogosTestContext("blockchain_module");
     TempDir tmpDir;
     const std::string config = writeGeneratedConfig(tmpDir);
-    t.mockCFunction("merge_user_config").returns("");
-    t.mockCFunction("merge_user_config_error").returns(0);
     LOGOS_ASSERT_TRUE(LogosBlockchainModule::pow_configure(
         config,
         R"({"auto_claim_targets": [{"public_key": ")" + LEADER_FUNDING_PK + R"(", "threshold": "18446744073709551615"}]})"
     ).success);
 
-    // merge is mocked, so the file still holds what writeGeneratedConfig wrote:
-    // an empty target list and the generated mining knobs.
+    // The target just written comes back, alongside the generated mining knobs.
     StdLogosResult result = LogosBlockchainModule::read_pow_config(config);
     LOGOS_ASSERT_TRUE(result.success);
     const std::string json = result.value.get<std::string>();
@@ -3131,7 +3078,11 @@ LOGOS_TEST(read_pow_config_reports_the_current_section) {
     LOGOS_ASSERT_TRUE(contains(json, "\"tick_seconds\":\"300\""));
     // null stays null: it is the node's "one thread per logical CPU".
     LOGOS_ASSERT_TRUE(contains(json, "\"max_threads\":null"));
-    LOGOS_ASSERT_TRUE(contains(json, "\"auto_claim_targets\":[]"));
+    // A u64 threshold survives as text, which is why thresholds travel as strings.
+    LOGOS_ASSERT_EQ(
+        readPow(config)["auto_claim_targets"],
+        nlohmann::json::array({target(LEADER_FUNDING_PK, "18446744073709551615")})
+    );
 }
 
 LOGOS_TEST(read_accounts_fails_on_a_missing_config) {

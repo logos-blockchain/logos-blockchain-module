@@ -27,11 +27,6 @@ BlockCallback g_lastNewBlockCallback = nullptr;
 BlockCallback g_lastProcessedBlockCallback = nullptr;
 BlockCallback g_lastLibBlockCallback = nullptr;
 
-// Captures the extra YAML and flags passed to the most recent merge_user_config
-// call. A null extra YAML pointer is recorded as the sentinel "<null>".
-std::string g_lastMergeExtraYaml;
-MergeConfigFlags g_lastMergeFlags = {};
-
 static char s_fakeNode = 0;
 static CryptarchiaInfo s_fakeCryptarchiaInfo = {};
 
@@ -82,44 +77,8 @@ OperationStatus shutdown_node(LogosBlockchainNode* node) {
     return make_status(LOGOS_CMOCK_RETURN(int, "shutdown_node"));
 }
 
-OperationStatus update_user_config(const char* user_config_path, const char* keystore_path) {
-    LOGOS_CMOCK_RECORD("update_user_config");
-    return make_status(LOGOS_CMOCK_RETURN(int, "update_user_config"));
-}
-
-OperationStatus migrate_user_config(const char* output_path, const char* keystore_path) {
-    LOGOS_CMOCK_RECORD("migrate_user_config");
-    return make_status(LOGOS_CMOCK_RETURN(int, "migrate_user_config"));
-}
-
-OperationStatus migrate_user_config_0_1_2(
-    const char* new_config_path,
-    const char* old_config_path,
-    const char* keystore_path)
-{
-    LOGOS_CMOCK_RECORD("migrate_user_config_0_1_2");
-    return make_status(LOGOS_CMOCK_RETURN(int, "migrate_user_config_0_1_2"));
-}
-
-FfiMergeUserConfigResult merge_user_config(
-    const char* source_path,
-    const char* destination_path,
-    const char* extra_yaml,
-    MergeConfigFlags flags)
-{
-    LOGOS_CMOCK_RECORD("merge_user_config");
-    g_lastMergeExtraYaml = extra_yaml ? extra_yaml : "<null>";
-    g_lastMergeFlags = flags;
-    FfiMergeUserConfigResult result;
-    const char* report = LOGOS_CMOCK_RETURN_STRING("merge_user_config");
-    result.value = report && *report ? strdup(report) : nullptr;
-    result.error = make_status(LOGOS_CMOCK_RETURN(int, "merge_user_config_error"));
-    return result;
-}
-
 OperationStatus participate(
     const char* config_path,
-    const char* keystore_path,
     const char* output_dir,
     const char* external_address)
 {
@@ -128,7 +87,6 @@ OperationStatus participate(
 }
 
 StringResult generate_key(
-    const char* user_config_path,
     const char* keystore_path,
     KeyType key_type,
     const char* key_title)
@@ -142,7 +100,6 @@ StringResult generate_key(
 }
 
 OperationStatus add_key(
-    const char* user_config_path,
     const char* keystore_path,
     KeyType key_type,
     const char* key_hex,
@@ -153,7 +110,6 @@ OperationStatus add_key(
 }
 
 OperationStatus remove_key(
-    const char* user_config_path,
     const char* keystore_path,
     const char* key_title)
 {

@@ -8,7 +8,10 @@
 #include <cctype>
 #include <charconv>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
+#include <fstream>
+#include <libfyaml.h>
 #include <map>
 #include <functional>
 #include <nlohmann/json.hpp>
@@ -436,7 +439,7 @@ namespace {
     }
 
     // The pow section as a YAML fragment carrying only the fields the caller
-    // set. merge_user_config merges it key by key, so an omitted field is left
+    // set. merge_yaml_mapping merges it key by key, so an omitted field is left
     // alone and a list is replaced whole — which is exactly the contract this
     // API promises. Empty parents are never emitted: `mining:` with nothing
     // under it is a null, and merging a null would wipe the section.
@@ -474,6 +477,52 @@ namespace {
         if (!auto_claim.empty())
             yaml += "  auto_claim:\n" + auto_claim;
         return yaml;
+    }
+
+    // Applies a YAML fragment onto the config file, rewriting it in place. The
+    // whole document is re-emitted, with the original block style and tags kept,
+    // and swapped in with a rename so a failed write leaves the file as it was.
+    bool merge_fragment_into_file(const fs::path& config, const std::string& fragment, std::string& error) {
+        fy_document* doc = fy_document_build_from_file(nullptr, config.string().c_str());
+        if (!doc) {
+            error = "Failed to parse " + config.string() + " as YAML.";
+            return false;
+        }
+        fy_document* extra = fy_document_build_from_string(nullptr, fragment.data(), fragment.size());
+        if (!extra) {
+            fy_document_destroy(doc);
+            error = "Internal error: the pow fragment is not valid YAML.";
+            return false;
+        }
+
+        fy_node* root = fy_document_root(doc);
+        const bool merged = root && fy_node_is_mapping(root) && fy_node_is_mapping(fy_document_root(extra)) &&
+                            merge_yaml_mapping(doc, root, fy_document_root(extra));
+        char* text = merged ? fy_emit_document_to_string(doc, FYECF_DEFAULT) : nullptr;
+        fy_document_destroy(extra);
+        fy_document_destroy(doc);
+        if (!text) {
+            error = "Failed to merge the pow section into " + config.string() + ".";
+            return false;
+        }
+
+        const fs::path tmp = config.string() + ".tmp";
+        bool written = false;
+        {
+            std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+            out << text;
+            written = static_cast<bool>(out);
+        }
+        free(text);
+        std::error_code ec;
+        if (written)
+            fs::rename(tmp, config, ec);
+        if (!written || ec) {
+            fs::remove(tmp, ec);
+            error = "Failed to write " + config.string() + ".";
+            return false;
+        }
+        return true;
     }
 } // namespace
 
@@ -762,90 +811,22 @@ StdLogosResult LogosBlockchainModule::purge_state() const {
 
 // Config management
 
-StdLogosResult LogosBlockchainModule::update_user_config(
-    const std::string& user_config_path,
-    const std::string& keystore_path
-) {
-    const std::string config = localPathFromFileUrl(user_config_path);
-    const std::string keystore = localPathFromFileUrl(keystore_path);
-
-    OperationStatus status = ::update_user_config(config.c_str(), keystore.c_str());
-    return result::from_operation_status(status);
-}
-
-StdLogosResult LogosBlockchainModule::migrate_user_config(
-    const std::string& output_path,
-    const std::string& keystore_path
-) {
-    const std::string output = localPathFromFileUrl(output_path);
-    const std::string keystore = localPathFromFileUrl(keystore_path);
-
-    OperationStatus status = ::migrate_user_config(output.c_str(), keystore.c_str());
-    return result::from_operation_status(status);
-}
-
-StdLogosResult LogosBlockchainModule::migrate_user_config_0_1_2(
-    const std::string& new_config_path,
-    const std::string& old_config_path,
-    const std::string& keystore_path
-) {
-    const std::string new_config = localPathFromFileUrl(new_config_path);
-    const std::string old_config = localPathFromFileUrl(old_config_path);
-    const std::string keystore = localPathFromFileUrl(keystore_path);
-
-    OperationStatus status = ::migrate_user_config_0_1_2(new_config.c_str(), old_config.c_str(), keystore.c_str());
-    return result::from_operation_status(status);
-}
-
-StdLogosResult LogosBlockchainModule::merge_user_config(
-    const std::string& source_path,
-    const std::string& destination_path,
-    const std::string& extra_yaml,
-    const bool source_insert_missing,
-    const bool extra_insert_missing
-) {
-    const std::string source = localPathFromFileUrl(source_path);
-    const std::string destination = localPathFromFileUrl(destination_path);
-    const char* extra_yaml_ptr = extra_yaml.empty() ? nullptr : extra_yaml.c_str();
-    const MergeConfigFlags flags{source_insert_missing, extra_insert_missing};
-
-    auto [value, error] = ::merge_user_config(source.c_str(), destination.c_str(), extra_yaml_ptr, flags);
-    if (!is_ok(&error)) {
-        return result::err(operation_status::take_message(error));
-    }
-    if (!value) {
-        return result::ok(std::string{});
-    }
-
-    const std::string out(value);
-    OperationStatus free_status = free_cstring(value);
-    if (!is_ok(&free_status)) {
-        fprintf(
-            stderr, "Failed to free merge conflicts report: %s\n", operation_status::take_message(free_status).c_str()
-        );
-    }
-    return result::ok(out);
-}
-
 StdLogosResult LogosBlockchainModule::participate(
     const std::string& config_path,
-    const std::string& keystore_path,
     const std::string& output_dir,
     const std::string& external_address
 ) {
     const std::string config = localPathFromFileUrl(config_path);
-    const std::string keystore = localPathFromFileUrl(keystore_path);
     const std::string output = localPathFromFileUrl(output_dir);
     const char* external_address_ptr = external_address.empty() ? nullptr : external_address.c_str();
 
-    OperationStatus status = ::participate(config.c_str(), keystore.c_str(), output.c_str(), external_address_ptr);
+    OperationStatus status = ::participate(config.c_str(), output.c_str(), external_address_ptr);
     return result::from_operation_status(status);
 }
 
 // Keystore
 
 StdLogosResult LogosBlockchainModule::generate_key(
-    const std::string& user_config_path,
     const std::string& keystore_path,
     const std::string& key_type,
     const std::string& key_title
@@ -855,11 +836,10 @@ StdLogosResult LogosBlockchainModule::generate_key(
         return result::err(R"(Invalid key_type (expected "ed25519" or "zk").)");
     }
 
-    const std::string config = localPathFromFileUrl(user_config_path);
     const std::string keystore = localPathFromFileUrl(keystore_path);
     const char* key_title_ptr = key_title.empty() ? nullptr : key_title.c_str();
 
-    auto [value, error] = ::generate_key(config.c_str(), keystore.c_str(), type, key_title_ptr);
+    auto [value, error] = ::generate_key(keystore.c_str(), type, key_title_ptr);
     if (!is_ok(&error)) {
         return result::err(operation_status::take_message(error));
     }
@@ -873,7 +853,6 @@ StdLogosResult LogosBlockchainModule::generate_key(
 }
 
 StdLogosResult LogosBlockchainModule::add_key(
-    const std::string& user_config_path,
     const std::string& keystore_path,
     const std::string& key_type,
     const std::string& key_hex,
@@ -885,23 +864,17 @@ StdLogosResult LogosBlockchainModule::add_key(
         return result::err(R"(Invalid key_type (expected "ed25519" or "zk").)");
     }
 
-    const std::string config = localPathFromFileUrl(user_config_path);
     const std::string keystore = localPathFromFileUrl(keystore_path);
     const char* key_title_ptr = key_title.empty() ? nullptr : key_title.c_str();
 
-    OperationStatus status = ::add_key(config.c_str(), keystore.c_str(), type, key_hex.c_str(), key_title_ptr);
+    OperationStatus status = ::add_key(keystore.c_str(), type, key_hex.c_str(), key_title_ptr);
     return result::from_operation_status(status);
 }
 
-StdLogosResult LogosBlockchainModule::remove_key(
-    const std::string& user_config_path,
-    const std::string& keystore_path,
-    const std::string& key_title
-) {
-    const std::string config = localPathFromFileUrl(user_config_path);
+StdLogosResult LogosBlockchainModule::remove_key(const std::string& keystore_path, const std::string& key_title) {
     const std::string keystore = localPathFromFileUrl(keystore_path);
 
-    OperationStatus status = ::remove_key(config.c_str(), keystore.c_str(), key_title.c_str());
+    OperationStatus status = ::remove_key(keystore.c_str(), key_title.c_str());
     return result::from_operation_status(status);
 }
 
@@ -940,7 +913,7 @@ StdLogosResult LogosBlockchainModule::pow_configure(
     }
 
     // Everything is validated against the file as read before anything is
-    // written. The write itself is one merge_user_config call, so a rejected
+    // written. The write itself is one rewrite of the file, so a rejected
     // field cannot leave the accepted ones applied.
     struct ScalarField {
         const char* name;
@@ -1048,15 +1021,8 @@ StdLogosResult LogosBlockchainModule::pow_configure(
         has_targets ? &targets : nullptr
     );
 
-    const StdLogosResult merged = merge_user_config(
-        config.string(), config.string(), extra_yaml, false, /*extra_insert_missing=*/true
-    );
-    if (!merged.success) {
-        return merged;
-    }
-
-    if (const std::string conflicts = merged.value.get<std::string>(); !conflicts.empty()) {
-        return result::err("Could not apply the PoW config:\n" + conflicts);
+    if (!merge_fragment_into_file(config, extra_yaml, error)) {
+        return result::err(std::move(error));
     }
 
     fprintf(stderr, "pow_configure: applied\n%s", extra_yaml.c_str());
