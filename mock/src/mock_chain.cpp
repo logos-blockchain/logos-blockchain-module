@@ -1374,7 +1374,7 @@ CryptarchiaView Node::cryptarchiaInfo() {
 TimeView Node::timeInfo() {
     std::lock_guard lock(m_mutex);
     const uint64_t slot = clockSlot(nowMs());
-    return {m_params.slotMs, m_params.genesisMs, slot, epochOf(slot)};
+    return {m_params.slotMs, m_params.genesisMs, slot, epochOf(slot), m_params.epochSlots};
 }
 
 NetworkView Node::networkInfo() {

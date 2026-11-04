@@ -93,6 +93,7 @@ LOGOS_TEST(generate_user_config_from_json_string) {
 extern std::string g_lastGeneratedOutput;
 extern std::string g_lastGeneratedStatePath;
 extern std::string g_lastGeneratedStoragePath;
+extern std::string g_lastParticipateExternalPort;
 extern std::string g_lastGeneratedLogsPath;
 
 static void clearGeneratedPaths() {
@@ -1913,15 +1914,16 @@ LOGOS_TEST(get_time_info_returns_json_on_success) {
 
     t.mockCFunction("get_time_info_error").returns(0);
     t.mockCFunction("time_slot_duration_ms").returns(2000);
-    t.mockCFunction("time_genesis_time_unix_ms").returns(1700000);
+    t.mockCFunction("time_slots_per_epoch").returns(100);
+    t.mockCFunction("time_genesis_time_unix").returns(1700000000);
     t.mockCFunction("time_current_slot").returns(1234);
     t.mockCFunction("time_current_epoch").returns(7);
 
     StdLogosResult result = module->get_time_info();
     LOGOS_ASSERT_TRUE(result.success);
     std::string json = result.value.get<std::string>();
-    LOGOS_ASSERT_TRUE(contains(json, "\"slot_duration_ms\":2000"));
-    LOGOS_ASSERT_TRUE(contains(json, "\"genesis_time_unix_ms\":1700000"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"era_timings\":{\"0\":{\"slot_duration_ms\":2000,\"slots_per_epoch\":100}}"));
+    LOGOS_ASSERT_TRUE(contains(json, "\"genesis_time\":\"2023-11-14T22:13:20Z\""));
     LOGOS_ASSERT_TRUE(contains(json, "\"current_slot\":1234"));
     LOGOS_ASSERT_TRUE(contains(json, "\"current_epoch\":7"));
     LOGOS_ASSERT(t.cFunctionCalled("get_time_info"));
@@ -2413,7 +2415,8 @@ LOGOS_TEST(participate_returns_0_on_success) {
 
     t.mockCFunction("participate").returns(0);
 
-    LOGOS_ASSERT_TRUE(module.participate("/tmp/config.yaml", "/tmp/out", "").success);
+    LOGOS_ASSERT_TRUE(module.participate("/tmp/config.yaml", "/tmp/out", "1.2.3.4", 3000).success);
+    LOGOS_ASSERT_EQ(g_lastParticipateExternalPort, std::string("3000"));
     LOGOS_ASSERT(t.cFunctionCalled("participate"));
 }
 
@@ -2423,7 +2426,7 @@ LOGOS_TEST(participate_returns_1_on_failure) {
 
     t.mockCFunction("participate").returns(1);
 
-    LOGOS_ASSERT_FALSE(module.participate("/tmp/config.yaml", "/tmp/out", "1.2.3.4").success);
+    LOGOS_ASSERT_FALSE(module.participate("/tmp/config.yaml", "/tmp/out", "", 0).success);
 }
 
 // ============================================================================

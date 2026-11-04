@@ -9,6 +9,7 @@
 #include <charconv>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <libfyaml.h>
@@ -814,13 +815,19 @@ StdLogosResult LogosBlockchainModule::purge_state() const {
 StdLogosResult LogosBlockchainModule::participate(
     const std::string& config_path,
     const std::string& output_dir,
-    const std::string& external_address
+    const std::string& external_address,
+    const uint64_t external_port
 ) {
+    if (external_port > UINT16_MAX) {
+        return result::err("Invalid external_port (65535 at most, 0 for none).");
+    }
     const std::string config = localPathFromFileUrl(config_path);
     const std::string output = localPathFromFileUrl(output_dir);
     const char* external_address_ptr = external_address.empty() ? nullptr : external_address.c_str();
+    const uint16_t port = static_cast<uint16_t>(external_port);
+    const uint16_t* external_port_ptr = port == 0 ? nullptr : &port;
 
-    OperationStatus status = ::participate(config.c_str(), output.c_str(), external_address_ptr);
+    OperationStatus status = ::participate(config.c_str(), output.c_str(), external_address_ptr, external_port_ptr);
     return result::from_operation_status(status);
 }
 
@@ -1884,11 +1891,26 @@ StdLogosResult LogosBlockchainModule::get_time_info() const {
         return result::err(operation_status::take_message(error));
     }
 
+    std::time_t genesis = static_cast<std::time_t>(value->genesis_time_unix);
+    std::tm genesis_tm{};
+    gmtime_r(&genesis, &genesis_tm);
+    char genesis_time[sizeof "YYYY-MM-DDTHH:MM:SSZ"];
+    std::strftime(genesis_time, sizeof genesis_time, "%Y-%m-%dT%H:%M:%SZ", &genesis_tm);
+
+    json era_timings = json::object();
+    for (size_t i = 0; i < value->era_timings_len; ++i) {
+        const EraTiming& era = value->era_timings[i];
+        era_timings[std::to_string(era.first_epoch)] = {
+            {"slot_duration_ms", static_cast<int64_t>(era.slot_duration_ms)},
+            {"slots_per_epoch", static_cast<int64_t>(era.slots_per_epoch)},
+        };
+    }
+
     json obj;
-    obj["slot_duration_ms"] = static_cast<int64_t>(value->slot_duration_ms);
-    obj["genesis_time_unix_ms"] = value->genesis_time_unix_ms;
+    obj["genesis_time"] = genesis_time;
     obj["current_slot"] = static_cast<int64_t>(value->current_slot);
     obj["current_epoch"] = value->current_epoch;
+    obj["era_timings"] = std::move(era_timings);
 
     OperationStatus free_status = free_time_info(value);
     if (!is_ok(&free_status)) {

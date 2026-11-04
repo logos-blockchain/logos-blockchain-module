@@ -200,10 +200,17 @@ typedef struct {
 } PoWStatus;
 
 typedef struct {
+    uint32_t first_epoch;
     uint64_t slot_duration_ms;
-    int64_t genesis_time_unix_ms;
+    uint64_t slots_per_epoch;
+} EraTiming;
+
+typedef struct {
+    int64_t genesis_time_unix;
     uint64_t current_slot;
     uint32_t current_epoch;
+    EraTiming* era_timings;
+    size_t era_timings_len;
 } TimeInfo;
 
 // libp2p connectivity counters (plain values, no free call needed)
@@ -256,7 +263,8 @@ OperationStatus subscribe_to_lib_blocks(LogosBlockchainNode* node, BlockCallback
 OperationStatus participate(
     const char* config_path,
     const char* output_dir,
-    const char* external_address);
+    const char* external_address,
+    const uint16_t* external_port);
 
 // Keystore
 StringResult generate_key(

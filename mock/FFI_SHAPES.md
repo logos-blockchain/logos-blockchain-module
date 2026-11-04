@@ -363,13 +363,13 @@ The module renders each of these into JSON or hex. **The FFI never returns JSON 
 ```
 
 ### 3.3 `get_time_info(node) -> TimeInfo*` - `cb/api/time.rs:13-121`
-- **Fields:** `{slot_duration_ms u64, genesis_time_unix_ms i64, current_slot u64, current_epoch u32}`, taken from the time service's latest wall-clock tick (`services/time/src/lib.rs:169-195`).
+- **Fields:** `{genesis_time_unix i64, current_slot u64, current_epoch u32, era_timings *EraTiming, era_timings_len usize}`, `EraTiming = {first_epoch u32, slot_duration_ms u64, slots_per_epoch u64}`, one per era in order; taken from the time service's latest wall-clock tick (`services/time/src/lib.rs:169-195`).
   - slot = floor((now − genesis) / slot_duration), 0 before genesis (`consensus/cryptarchia-engine/src/time.rs`).
   - epoch = slot / epoch_length (§4.2).
 - **Errors:** `RelayError`, `ChannelSendError`, `ChannelReceiveError`, `ServiceError`.
 - **Module JSON** (`module:...cpp:1882-1905`), devnet at 2026-10-06T12:00Z:
 ```json
-{"slot_duration_ms":1000,"genesis_time_unix_ms":1790598600000,"current_slot":689400,"current_epoch":19}
+{"genesis_time":"2026-09-28T12:30:00Z","current_slot":689400,"current_epoch":19,"era_timings":{"0":{"slot_duration_ms":1000,"slots_per_epoch":36000}}}
 ```
 
 ### 3.4 `get_network_info(node) -> NetworkInfo` (by value) - `cb/api/network.rs:9-94`

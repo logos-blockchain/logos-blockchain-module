@@ -67,7 +67,8 @@ public:
     [[nodiscard]] static StdLogosResult participate(
         const std::string& config_path,
         const std::string& output_dir,
-        const std::string& external_address
+        const std::string& external_address,
+        uint64_t external_port
     );
 
     // Keystore
@@ -207,7 +208,8 @@ public:
 
     // Time
     // Consensus time info as JSON:
-    //   { slot_duration_ms, genesis_time_unix_ms, current_slot, current_epoch }
+    //   { genesis_time, current_slot, current_epoch,
+    //     era_timings: { "<first epoch>": { slot_duration_ms, slots_per_epoch } } }
     [[nodiscard]] StdLogosResult get_time_info() const;
 
     // PoW
