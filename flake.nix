@@ -50,6 +50,19 @@
 
       module = logos-module-builder.lib.mkLogosModule moduleArgs;
 
+      sqlModule = logos-module-builder.lib.mkLogosModule {
+        src = ./sql;
+        configFile = ./sql/metadata.json;
+        flakeInputs = inputs;
+        externalLibInputs.logos_sql.packages = forAllSystems (system: {
+          default = inputs.logos-blockchain.packages.${system}.logos-sql-c;
+        });
+        tests = {
+          dir = ./sql/tests;
+          mockCLibs = [ "logos_sql" ];
+        };
+      };
+
       # The same module with the running node simulated (config and key helpers
       # stay real). See mock/README.md; apps take it through mock/flake.nix.
       mockModule = logos-module-builder.lib.mkLogosModule (moduleArgs // {
@@ -122,6 +135,12 @@
     in
     module // {
       mock = mockModule;
+      sql = sqlModule;
+
+      checks = forAllSystems (system:
+        (module.checks.${system} or {}) // {
+          sql-unit-tests = sqlModule.checks.${system}.unit-tests;
+        });
 
       packages = forAllSystems (system:
         let
@@ -132,6 +151,12 @@
         // nixpkgs.lib.mapAttrs' (name: nixpkgs.lib.nameValuePair "mock-${name}") mockModule.packages.${system}
         // {
           mock = mockModule.packages.${system}.default;
+          sql = sqlModule.packages.${system}.default;
+          sql-unit-tests = sqlModule.packages.${system}.unit-tests;
+          sql-lgx = sqlModule.packages.${system}.lgx;
+          sql-lgx-portable = sqlModule.packages.${system}.lgx-portable;
+          sql-install = sqlModule.packages.${system}.install;
+          sql-install-portable = sqlModule.packages.${system}.install-portable;
           rust-client-example = example.default;
           rust-client-example-lgx = example.lgx;
           rust-client-example-lgx-portable = example.lgx-portable;

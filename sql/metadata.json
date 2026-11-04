@@ -1,0 +1,23 @@
+{
+  "name": "sql_module",
+  "display_name": "Logos SQL",
+  "version": "0.0.999",
+  "description": "Open and query read-only Logos SQL replicas",
+  "author": "Logos Blockchain Team",
+  "type": "core",
+  "interface": "universal",
+  "codegen": {
+    "impl_header": "logos_sql_module.h",
+    "impl_class": "LogosSqlModule"
+  },
+  "category": "blockchain",
+  "main": "sql_module_plugin",
+  "dependencies": [],
+  "capabilities": [],
+  "include": ["liblogos_sql.dylib", "liblogos_sql.so", "liblogos_sql.dll"],
+  "nix": {
+    "packages": {"build": [], "runtime": ["nlohmann_json"]},
+    "external_libraries": [{"name": "logos_sql"}],
+    "cmake": {"extra_include_dirs": ["lib"]}
+  }
+}

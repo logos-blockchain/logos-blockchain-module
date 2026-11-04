@@ -35,8 +35,13 @@ jobs:
       - name: Build portable module
         run: nix build '.#lgx-portable' --out-link result-lgx-portable
 
+      - name: Build portable SQL module
+        run: nix build '.#sql-lgx-portable' --out-link result-sql-lgx-portable
+
       - name: Extract LGX bundle
-        run: cp result-lgx-portable/*.lgx ./logos-module-${{ matrix.arch }}.lgx
+        run: |
+          cp result-lgx-portable/*.lgx ./logos-module-${{ matrix.arch }}.lgx
+          cp result-sql-lgx-portable/*.lgx ./logos-sql-module-${{ matrix.arch }}.lgx
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
