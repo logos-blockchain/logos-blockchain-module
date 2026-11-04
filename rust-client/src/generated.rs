@@ -211,6 +211,27 @@ impl BlockchainModuleClient {
         });
     }
 
+    pub fn show_config(&self, config_path: &str) -> Result<serde_json::Value, LogosError> {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path)]);
+        let value = self.proxy.call_json("show_config", &args)?;
+        Ok(value)
+    }
+
+    /// Async twin of [`Self::show_config`]: fire the call and receive the typed
+    /// result in `callback` once it lands — the Rust analog of the C++
+    /// client's `show_configAsync`. The callback runs from the protocol
+    /// completion path (the module's Qt event loop), so it fires after
+    /// the current method returns, never inline.
+    pub fn show_config_async<F>(&self, config_path: &str, callback: F)
+    where
+        F: FnOnce(Result<serde_json::Value, LogosError>) + Send + 'static,
+    {
+        let args = serde_json::Value::Array(vec![serde_json::Value::from(config_path)]);
+        self.proxy.call_json_async("show_config", &args, move |result| {
+            callback(result.and_then(|value| Ok(value)));
+        });
+    }
+
     pub fn generate_key(&self, user_config_path: &str, keystore_path: &str, key_type: &str, key_title: &str) -> Result<serde_json::Value, LogosError> {
         let args = serde_json::Value::Array(vec![serde_json::Value::from(user_config_path), serde_json::Value::from(keystore_path), serde_json::Value::from(key_type), serde_json::Value::from(key_title)]);
         let value = self.proxy.call_json("generate_key", &args)?;

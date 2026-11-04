@@ -327,6 +327,7 @@ The caller signs its own ops and then submits `{mantle_tx: funded_tx, ops_proofs
 
 ### 2.10 Others returning strings
 - `get_peer_id(config_path)`: a base58 PeerId, no node needed.
+- `show_config(config_path)`: the effective config as YAML, secrets redacted, no node needed.
 - `generate_key(...)`: the key id.
 - `get_build_version_info()`: JSON.
 
