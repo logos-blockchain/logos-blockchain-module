@@ -160,13 +160,11 @@ sections:
     step: true
     text: |
       A natural next move is to generate a *second* config — say a peerless one
-      with `skip_ibd: true` — alongside the first. That does **not** work, and the
-      error is worth seeing because it is the same one operators hit when they
-      re-run generation over an existing setup.
+      with `skip_ibd: true` — alongside the first.
 
       The keystore is created once per instance directory. A second
-      `generate_user_config` against the same instance refuses rather than
-      overwriting it:
+      `generate_user_config` against the same instance keeps it and writes a new
+      config next to the first one:
     steps:
       - title: "Write the arguments"
         file:
@@ -180,22 +178,21 @@ sections:
               "use_persistence_paths": true
             }
 
-      - title: "Try to generate a second config"
+      - title: "Generate a second config"
         run: "./logos/bin/logosctl --config-dir ./session call blockchain_module generate_user_config @gen-args-solo.json"
         code_block: |
           logosctl call blockchain_module generate_user_config @gen-args-solo.json
         expect_contains:
-          - "Keystore file exists. Use `update` command."
+          - "solo-user-config.yaml"
         post_text: |
-          Refusing is the right behaviour — silently regenerating a keystore would
-          discard the keys the previous config's node identity depends on. To
-          change an existing setup use `update_user_config`; to get a genuinely
-          separate configuration, use a separate instance directory.
+          Both configs share the keystore, so they share the node identity and
+          keys: they are two ways to run the same node, not two nodes. To get a
+          separate node, use a separate instance directory.
 
-          This is also why `skip_ibd` is demonstrated in the companion
-          [`blockchain-module-runtime`](./blockchain-module-runtime.md) doc-test
-          rather than here: that spec generates exactly one config, with
-          `skip_ibd: true`, and then starts a node from it.
+          `skip_ibd` is exercised in the companion
+          [`blockchain-module-runtime`](./blockchain-module-runtime.md) doc-test,
+          which generates one config with `skip_ibd: true` and starts a node
+          from it.
 
   - title: "Shut down"
     step: true
