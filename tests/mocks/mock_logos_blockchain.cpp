@@ -14,6 +14,7 @@
 std::string g_lastGeneratedOutput;
 std::string g_lastGeneratedStatePath;
 std::string g_lastGeneratedStoragePath;
+std::string g_lastParticipateExternalPort;
 std::string g_lastGeneratedLogsPath;
 
 // Captures the raw claim address passed to the most recent pow_claim call so
@@ -80,9 +81,11 @@ OperationStatus shutdown_node(LogosBlockchainNode* node) {
 OperationStatus participate(
     const char* config_path,
     const char* output_dir,
-    const char* external_address)
+    const char* external_address,
+    const uint16_t* external_port)
 {
     LOGOS_CMOCK_RECORD("participate");
+    g_lastParticipateExternalPort = external_port ? std::to_string(*external_port) : "<null>";
     return make_status(LOGOS_CMOCK_RETURN(int, "participate"));
 }
 
@@ -444,13 +447,17 @@ StringResult get_block_events(LogosBlockchainNode* node, const HeaderId* header_
     return result;
 }
 
+static EraTiming s_fakeEraTiming = {};
 static TimeInfo s_fakeTimeInfo = {};
 
 TimeInfoResult get_time_info(LogosBlockchainNode* node) {
     LOGOS_CMOCK_RECORD("get_time_info");
     TimeInfoResult result;
-    s_fakeTimeInfo.slot_duration_ms = static_cast<uint64_t>(LOGOS_CMOCK_RETURN(int, "time_slot_duration_ms"));
-    s_fakeTimeInfo.genesis_time_unix_ms = static_cast<int64_t>(LOGOS_CMOCK_RETURN(int, "time_genesis_time_unix_ms"));
+    s_fakeEraTiming.slot_duration_ms = static_cast<uint64_t>(LOGOS_CMOCK_RETURN(int, "time_slot_duration_ms"));
+    s_fakeEraTiming.slots_per_epoch = static_cast<uint64_t>(LOGOS_CMOCK_RETURN(int, "time_slots_per_epoch"));
+    s_fakeTimeInfo.era_timings = &s_fakeEraTiming;
+    s_fakeTimeInfo.era_timings_len = 1;
+    s_fakeTimeInfo.genesis_time_unix = static_cast<int64_t>(LOGOS_CMOCK_RETURN(int, "time_genesis_time_unix"));
     s_fakeTimeInfo.current_slot = static_cast<uint64_t>(LOGOS_CMOCK_RETURN(int, "time_current_slot"));
     s_fakeTimeInfo.current_epoch = static_cast<uint32_t>(LOGOS_CMOCK_RETURN(int, "time_current_epoch"));
     result.value = &s_fakeTimeInfo;

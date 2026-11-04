@@ -247,7 +247,7 @@ FfiTimeInfoResult get_time_info(const LogosBlockchainNode* node) {
     NODE_OR_RETURN(FfiTimeInfoResult)
     const lbmock::TimeView v = n->timeInfo();
     FfiTimeInfoResult r{};
-    r.value = new TimeInfo{v.slotMs, v.genesisMs, v.slot, v.epoch};
+    r.value = new TimeInfo{v.genesisMs / 1000, v.slot, v.epoch, new EraTiming{0, v.slotMs, v.epochSlots}, 1};
     r.error = ok();
     return r;
 }
@@ -255,6 +255,7 @@ FfiTimeInfoResult get_time_info(const LogosBlockchainNode* node) {
 OperationStatus free_time_info(TimeInfo* pointer) {
     if (!pointer)
         return status(NullPointer, "Received a null pointer.");
+    delete pointer->era_timings;
     delete pointer;
     return ok();
 }

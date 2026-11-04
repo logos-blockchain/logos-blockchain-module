@@ -194,6 +194,7 @@ struct TimeView {
     int64_t genesisMs = 0;
     uint64_t slot = 0;
     uint32_t epoch = 0;
+    uint64_t epochSlots = 0;
 };
 
 struct NetworkView {
