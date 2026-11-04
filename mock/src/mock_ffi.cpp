@@ -328,12 +328,9 @@ FfiStatusResult_DeclarationId blend_join_as_core_node(const LogosBlockchainNode*
         r.error = status(NullPointer, "Received a null `locator` pointer.");
         return r;
     }
-    if (!service_note_id) {
-        r.error = status(NullPointer, "Received a null `service_note_id` pointer.");
-        return r;
-    }
     Error err;
-    const Bytes32 id = n->blendJoin(locator, lbmock::fromPtr(service_note_id), err);
+    const Bytes32 id = n->blendJoin(
+        locator, service_note_id ? std::optional(lbmock::fromPtr(service_note_id)) : std::nullopt, err);
     if (err)
         r.error = status(err);
     else {

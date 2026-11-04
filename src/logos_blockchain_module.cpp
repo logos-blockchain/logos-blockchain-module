@@ -1639,7 +1639,7 @@ StdLogosResult LogosBlockchainModule::submit_signed_transaction(const std::strin
 
 StdLogosResult LogosBlockchainModule::blend_join_as_core_node(
     const std::string& locator,
-    const std::string& locked_note_id_hex
+    const std::string& optional_service_note_id_hex
 ) const {
     if (!node) {
         return result::err("The node is not running.");
@@ -1649,12 +1649,16 @@ StdLogosResult LogosBlockchainModule::blend_join_as_core_node(
         return result::err("Invalid locator (must not be empty).");
     }
 
-    const std::vector<uint8_t> locked_note_id_bytes = parse_address_hex(locked_note_id_hex);
-    if (locked_note_id_bytes.empty() || static_cast<int>(locked_note_id_bytes.size()) != ADDRESS_BYTES) {
-        return result::err("Invalid locked_note_id_hex (64 hex characters required).");
+    std::vector<uint8_t> service_note_id_bytes;
+    if (!optional_service_note_id_hex.empty()) {
+        service_note_id_bytes = parse_address_hex(optional_service_note_id_hex);
+        if (static_cast<int>(service_note_id_bytes.size()) != ADDRESS_BYTES) {
+            return result::err("Invalid optional_service_note_id_hex (64 hex characters required, or empty to let the node pick).");
+        }
     }
+    const uint8_t* service_note_id = service_note_id_bytes.empty() ? nullptr : service_note_id_bytes.data();
 
-    auto [value, error] = ::blend_join_as_core_node(node, locator.c_str(), locked_note_id_bytes.data());
+    auto [value, error] = ::blend_join_as_core_node(node, locator.c_str(), service_note_id);
     if (!is_ok(&error)) {
         return result::err(operation_status::take_message(error));
     }

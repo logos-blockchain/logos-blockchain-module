@@ -343,7 +343,7 @@ BlendHashResult blend_join_as_core_node(
     const char* locator,
     const uint8_t* locked_note_id)
 {
-    LOGOS_CMOCK_RECORD("blend_join_as_core_node");
+    LOGOS_CMOCK_RECORD(locked_note_id ? "blend_join_as_core_node" : "blend_join_as_core_node_without_note");
     BlendHashResult result;
     memset(result.value, 0xCD, sizeof(Hash));
     result.error = make_status(LOGOS_CMOCK_RETURN(int, "blend_join_as_core_node_error"));
