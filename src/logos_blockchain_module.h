@@ -70,6 +70,9 @@ public:
         const std::string& external_address,
         uint64_t external_port
     );
+    // The config a node started from config_path would run with, as YAML with
+    // the keystore merged in and the secrets redacted. Needs no running node.
+    [[nodiscard]] static StdLogosResult show_config(const std::string& config_path);
 
     // Keystore
     // The keystore stands alone since node 0.3.3: the config no longer lists its
