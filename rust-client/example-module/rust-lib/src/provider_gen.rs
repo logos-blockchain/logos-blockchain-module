@@ -12,6 +12,14 @@
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::sync::Mutex;
 
+/// This module's own name, from the LIDL contract.
+///
+/// The ORIGIN of every outbound call this image makes: it is what
+/// capability_module checks against its known-caller roster and the
+/// target's access policy, what the target files the minted token
+/// under, and what a callee's `current_caller()` reports.
+pub const LOGOS_MODULE_NAME: &str = "blockchain_client_example";
+
 #[derive(Debug, Clone, Default)]
 pub struct RustModuleContext {
     pub module_path: String,
@@ -50,6 +58,15 @@ pub trait BlockchainClientExampleModule: 'static {
     /// LogosModuleContext::onContextReady().
     fn on_context_ready(&mut self, _ctx: &RustModuleContext) {}
 
+    /// Called when the host is about to unload this module, before the
+    /// implementation is dropped. Return `Synchronous` (the default)
+    /// when teardown finished inline, or `Asynchronous` to keep the
+    /// host waiting until `logos_rust_sdk::unload_finished()` is
+    /// called. The host enforces a grace period either way.
+    fn about_to_unload(&mut self) -> logos_rust_sdk::Shutdown {
+        logos_rust_sdk::Shutdown::Synchronous
+    }
+
     fn last_height(&mut self) -> i64;
     fn poll_count(&mut self) -> i64;
     fn last_info(&mut self) -> String;
@@ -59,9 +76,18 @@ pub trait BlockchainClientExampleModule: 'static {
 
 type DispatchFn = fn(&str, &[serde_json::Value]) -> Option<serde_json::Value>;
 type EnsureFn = fn(bool);
+// Reaches the author's impl from the teardown C export, which is a
+// free function with no `T` -- exactly why `dispatch` is reached
+// this way too.
+type AboutToUnloadFn = fn() -> i32;
 struct Registered {
     dispatch: DispatchFn,
     ensure: EnsureFn,
+    // Read only by the teardown export, which is emitted for
+    // protocol >= 0.5; an older module registers the hook and
+    // never calls it.
+    #[allow(dead_code)]
+    about_to_unload: AboutToUnloadFn,
 }
 static REGISTERED: Mutex<Option<Registered>> = Mutex::new(None);
 // A concurrency:"single" module runs entirely on one thread (its
@@ -102,6 +128,17 @@ pub fn install<T: BlockchainClientExampleModule + Default>() {
             imp.on_context_ready(&ctx);
         }
     }
+    fn about_to_unload_impl<T: BlockchainClientExampleModule + Default>() -> i32 {
+        // No instance means nothing was ever constructed, so there is
+        // nothing to tear down: Synchronous, and the host proceeds.
+        let mut guard = INSTANCE.0.lock().unwrap();
+        let Some(any) = guard.as_mut() else { return 0 };
+        let Some(imp) = any.downcast_mut::<T>() else { return 0 };
+        match imp.about_to_unload() {
+            logos_rust_sdk::Shutdown::Asynchronous => 1,
+            logos_rust_sdk::Shutdown::Synchronous => 0,
+        }
+    }
     fn dispatch_impl<T: BlockchainClientExampleModule + Default>(method: &str, args: &[serde_json::Value]) -> Option<serde_json::Value> {
         let mut guard = INSTANCE.0.lock().unwrap();
         if guard.is_none() {
@@ -110,31 +147,52 @@ pub fn install<T: BlockchainClientExampleModule + Default>() {
         let imp: &mut T = guard.as_mut().unwrap().downcast_mut::<T>()?;
         match method {
             "last_height" => {
+                if args.len() > 0 { return Some(logos_rust_sdk::args::invalid_args("blockchain_client_example", 0, args.len())); }
                 let result = imp.last_height();
                 Some(serde_json::Value::from(result))
             }
             "poll_count" => {
+                if args.len() > 0 { return Some(logos_rust_sdk::args::invalid_args("blockchain_client_example", 0, args.len())); }
                 let result = imp.poll_count();
                 Some(serde_json::Value::from(result))
             }
             "last_info" => {
+                if args.len() > 0 { return Some(logos_rust_sdk::args::invalid_args("blockchain_client_example", 0, args.len())); }
                 let result = imp.last_info();
                 Some(serde_json::Value::from(result))
             }
             "last_error" => {
+                if args.len() > 0 { return Some(logos_rust_sdk::args::invalid_args("blockchain_client_example", 0, args.len())); }
                 let result = imp.last_error();
                 Some(serde_json::Value::from(result))
             }
             "poll_now" => {
+                if args.len() > 0 { return Some(logos_rust_sdk::args::invalid_args("blockchain_client_example", 0, args.len())); }
                 let result = imp.poll_now();
                 Some(serde_json::Value::from(result))
             }
+            "name" => {
+                                     if !args.is_empty() { return Some(logos_rust_sdk::args::invalid_args("blockchain_client_example", 0, args.len())); }
+                                     let result = "blockchain_client_example".to_string();
+                                     Some(serde_json::Value::from(result))
+                                 }
+            "version" => {
+                                     if !args.is_empty() { return Some(logos_rust_sdk::args::invalid_args("blockchain_client_example", 0, args.len())); }
+                                     let result = "0.0.999".to_string();
+                                     Some(serde_json::Value::from(result))
+                                 }
+            "lidl" => {
+                                     if !args.is_empty() { return Some(logos_rust_sdk::args::invalid_args("blockchain_client_example", 0, args.len())); }
+                                     let result = "module blockchain_client_example {\n  version \"0.0.999\"\n  description \"Example Rust module that polls blockchain_module's cryptarchia height every 5 seconds through the generated logos-blockchain-client crate.\"\n  depends [blockchain_module]\n\n  method last_height() -> int description \"Chain height from the most recent successful poll, or -1 if none has succeeded yet.\"\n  method poll_count() -> int description \"Number of polls attempted since the module was loaded.\"\n  method last_info() -> tstr description \"Raw JSON of the most recent successful get_cryptarchia_info reply, or empty.\"\n  method last_error() -> tstr description \"Error text of the most recent failed poll, or empty if the last poll succeeded.\"\n  method poll_now() -> int description \"Polls once, synchronously, and returns the height (or -1 on failure).\"\n}\n".to_string();
+                                     Some(serde_json::Value::from(result))
+                                 }
             _ => None,
         }
     }
     *REGISTERED.lock().unwrap() = Some(Registered {
         dispatch: dispatch_impl::<T>,
         ensure: ensure_impl::<T>,
+        about_to_unload: about_to_unload_impl::<T>,
     });
 }
 
@@ -143,6 +201,18 @@ pub fn install<T: BlockchainClientExampleModule + Default>() {
 /// point: set_context / set_emit_callback latch on full wiring;
 /// dispatch passes require_emit = false as the no-event-host fallback.
 fn ensure_ready(require_emit: bool) {
+    // FIRST, and before the author's install hook can construct
+    // anything: tell the SDK the name this image announces when it
+    // calls out. Every generated path that reaches author code runs
+    // through here -- install/T::default, on_context_ready, dispatch,
+    // and (transitively) about_to_unload, which answers 0 unless
+    // install already ran -- so the origin is set before the first
+    // outbound client exists. Without a name the SDK announces
+    // nothing and the capability handshake fails closed; with the
+    // wrong one ("core") it authorized as the host. The SDK also
+    // keys its client cache by origin, so even a client built before
+    // this ran cannot be reused after it. Idempotent: a OnceLock set.
+    logos_rust_sdk::set_module_origin(LOGOS_MODULE_NAME);
     if REGISTERED.lock().unwrap().is_none() {
         unsafe { __logos_install_hook::logos_module_install() };
     }
@@ -199,7 +269,7 @@ pub extern "C" fn logos_module_dispatch(method: *const c_char, args_json: *const
 
 #[no_mangle]
 pub extern "C" fn logos_module_get_methods() -> *mut c_char {
-    to_c_string("[{\"isInvokable\":true,\"name\":\"last_height\",\"returnType\":\"int\",\"signature\":\"last_height()\"},{\"isInvokable\":true,\"name\":\"poll_count\",\"returnType\":\"int\",\"signature\":\"poll_count()\"},{\"isInvokable\":true,\"name\":\"last_info\",\"returnType\":\"QString\",\"signature\":\"last_info()\"},{\"isInvokable\":true,\"name\":\"last_error\",\"returnType\":\"QString\",\"signature\":\"last_error()\"},{\"isInvokable\":true,\"name\":\"poll_now\",\"returnType\":\"int\",\"signature\":\"poll_now()\"}]".to_string())
+    to_c_string("[{\"description\":\"Chain height from the most recent successful poll, or -1 if none has succeeded yet.\",\"isInvokable\":true,\"name\":\"last_height\",\"returnType\":\"int\",\"signature\":\"last_height()\"},{\"description\":\"Number of polls attempted since the module was loaded.\",\"isInvokable\":true,\"name\":\"poll_count\",\"returnType\":\"int\",\"signature\":\"poll_count()\"},{\"description\":\"Raw JSON of the most recent successful get_cryptarchia_info reply, or empty.\",\"isInvokable\":true,\"name\":\"last_info\",\"returnType\":\"QString\",\"signature\":\"last_info()\"},{\"description\":\"Error text of the most recent failed poll, or empty if the last poll succeeded.\",\"isInvokable\":true,\"name\":\"last_error\",\"returnType\":\"QString\",\"signature\":\"last_error()\"},{\"description\":\"Polls once, synchronously, and returns the height (or -1 on failure).\",\"isInvokable\":true,\"name\":\"poll_now\",\"returnType\":\"int\",\"signature\":\"poll_now()\"},{\"description\":\"The module's name, as declared in its metadata.\",\"isInvokable\":true,\"name\":\"name\",\"returnType\":\"QString\",\"signature\":\"name()\"},{\"description\":\"The module's version, as declared in its metadata.\",\"isInvokable\":true,\"name\":\"version\",\"returnType\":\"QString\",\"signature\":\"version()\"},{\"description\":\"The module's canonical LIDL interface document.\",\"isInvokable\":true,\"name\":\"lidl\",\"returnType\":\"QString\",\"signature\":\"lidl()\"}]".to_string())
 }
 
 #[no_mangle]
@@ -232,9 +302,15 @@ pub extern "C" fn logos_module_accept_token(module_name: *const c_char, token: *
     if module_name.is_null() || token.is_null() { return -1; }
     let name = unsafe { CStr::from_ptr(module_name) }.to_string_lossy().into_owned();
     let tok = unsafe { CStr::from_ptr(token) }.to_string_lossy().into_owned();
-    // The runtime handshake: hand the host-issued token to the SDK's
+    // THE OUTBOUND DOOR. Hand the host-issued token to the SDK's
     // protocol stack so this module's *outbound* calls authenticate —
     // the same stack the typed client wrappers invoke through.
+    //
+    // ONE MEANING ONLY, as of protocol 0.8: the module's OWN anchor,
+    // seeded by the Qt glue's onInit. A CALLER's token goes through
+    // logos_module_accept_inbound_token instead. Do not merge them —
+    // one value written through the wrong door made every capability
+    // grant silently bidirectional.
     logos_rust_sdk::save_token(&name, &tok);
     TOKENS.lock().unwrap().push((name, tok));
     0
@@ -244,7 +320,7 @@ pub extern "C" fn logos_module_accept_token(module_name: *const c_char, token: *
 /// (stamped at generation time by the build; never minted here).
 #[no_mangle]
 pub extern "C" fn logos_module_get_protocol_version() -> *const c_char {
-    static VERSION: &str = "0.2.0\0";
+    static VERSION: &str = "0.9.0\0";
     VERSION.as_ptr() as *const c_char
 }
 
@@ -253,4 +329,50 @@ pub extern "C" fn logos_module_string_free(s: *mut c_char) {
     if !s.is_null() {
         unsafe { drop(CString::from_raw(s)) };
     }
+}
+
+#[no_mangle]
+pub extern "C" fn logos_module_grant_host_services(services_json: *const c_char) -> c_int {
+    if services_json.is_null() { return -1; }
+    unsafe { logos_rust_sdk::grant_host_services(services_json) }
+}
+
+#[no_mangle]
+pub extern "C" fn logos_module_set_unload_done_callback(
+    cb: Option<logos_rust_sdk::UnloadDoneCb>,
+    user_data: *mut std::os::raw::c_void,
+) {
+    logos_rust_sdk::set_unload_done_callback(cb, user_data);
+}
+
+/// Ask the impl whether it is ready to be unloaded: 0 = Synchronous
+/// (proceed), 1 = Asynchronous (wait for unload_finished()).
+///
+/// A module that was never installed answers 0: there is no instance, so
+/// there is nothing to tear down and nothing for the host to wait on.
+#[no_mangle]
+pub extern "C" fn logos_module_about_to_unload() -> c_int {
+    let hook = REGISTERED.lock().unwrap().as_ref().map(|r| r.about_to_unload);
+    match hook {
+        Some(f) => f(),
+        None => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn logos_module_set_call_caller(caller_json: *const c_char) {
+    unsafe { logos_rust_sdk::set_call_caller(caller_json) }
+}
+
+extern "C" {
+    fn lp_token_save_inbound(caller: *const c_char, token: *const c_char) -> c_int;
+}
+
+#[no_mangle]
+pub extern "C" fn logos_module_accept_inbound_token(caller: *const c_char, token: *const c_char) -> c_int {
+    if caller.is_null() || token.is_null() { return -1; }
+    // INBOUND: `caller` is the module that will CALL US. This is not a
+    // credential this module may present to anyone, and it must not
+    // reach lp_token_save().
+    unsafe { lp_token_save_inbound(caller, token) }
 }

@@ -108,10 +108,6 @@ impl BlockchainModuleClient {
         self.generate_user_config_async(&args.to_string(), adapt(string("generate_user_config"), callback));
     }
 
-    pub fn update_config(&self, user_config_path: &str, keystore_path: &str) -> Result<(), ModuleError> {
-        unit("update_user_config")(self.update_user_config(user_config_path, keystore_path))
-    }
-
     pub fn peer_id(&self, config_path: &str) -> Result<String, ModuleError> {
         string("get_peer_id")(self.get_peer_id(config_path))
     }
@@ -122,14 +118,8 @@ impl BlockchainModuleClient {
         self.get_peer_id_async(config_path, adapt(string("get_peer_id"), callback));
     }
 
-    pub fn generate_wallet_key(
-        &self,
-        user_config_path: &str,
-        keystore_path: &str,
-        key_type: &str,
-        key_title: &str,
-    ) -> Result<String, ModuleError> {
-        string("generate_key")(self.generate_key(user_config_path, keystore_path, key_type, key_title))
+    pub fn generate_wallet_key(&self, keystore_path: &str, key_type: &str, key_title: &str) -> Result<String, ModuleError> {
+        string("generate_key")(self.generate_key(keystore_path, key_type, key_title))
     }
 
     pub fn balance(&self, address_hex: &str) -> Result<Value, ModuleError> {
