@@ -43,3 +43,61 @@ jobs:
 
       - name: Run unit tests
         run: nix build '.#checks.x86_64-linux.unit-tests' -L
+
+  # The lidl, the generated client and the example scaffold are committed.
+  # Regenerate them and fail when the committed copies are out of date.
+  client-generated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - uses: cachix/cachix-action@v15
+        with:
+          name: logos-co
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+
+      - name: Regenerate
+        run: nix run '.#generate'
+
+      - name: Fail on drift
+        run: |
+          if ! git diff --exit-code -- blockchain_module.lidl rust-client; then
+            echo "::error::The committed lidl or generated client is out of date. Run 'nix run .#generate' and commit the result."
+            exit 1
+          fi
+
+  # The hand-written layer over the generated client: it must compile against
+  # the regenerated code, and the module's replies must decode into the node's
+  # types at the pinned revision.
+  client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Client pins match flake.lock
+        run: rust-client/check-pins.sh
+
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libclang-dev cmake protobuf-compiler libssl-dev pkg-config
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            rust-client
+            rust-client/example-cargo
+
+      - name: Test the client
+        working-directory: rust-client
+        run: cargo test --locked
+
+      - name: Test the cargo example
+        working-directory: rust-client/example-cargo
+        run: cargo test --locked
+
