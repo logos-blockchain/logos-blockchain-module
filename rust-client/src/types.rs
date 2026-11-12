@@ -1,7 +1,9 @@
+use lb_common_http_client::{ApiHeader, ApiSignedHeader};
 pub use lb_common_http_client::{
     ApiBlock, BlockInfo, ChainServiceInfo, CryptarchiaInfo as NodeCryptarchiaInfo, Events,
     PhaseTag, ProcessedBlockEvent, Slot, State, TimeInfo,
 };
+use lb_core::{block::SignedHeader, header::Header};
 pub use lb_core::{
     header::HeaderId,
     mantle::{
@@ -14,6 +16,49 @@ pub use lb_http_api_common::bodies::wallet::{
     fund::{WalletFundRequestBody, WalletFundResponseBody},
 };
 use serde::{Deserialize, Deserializer};
+
+/// A block as `get_block` and `get_blocks` send it: the node's stored block,
+/// whose headers carry no id. The id is the header's hash, so it is computed
+/// here to hand out the same [`ApiBlock`] the block streams and the node's
+/// HTTP API give.
+///
+/// The node's own `Block` is not used to read it: that type re-checks the
+/// body root and the signature on every read, which the node already did
+/// before storing the block.
+#[derive(Deserialize)]
+pub(crate) struct StoredBlock {
+    header: Header,
+    #[serde(default)]
+    uncle_headers: Vec<SignedHeader>,
+    transactions: Vec<SignedOps<Unverified, StandardMode>>,
+}
+
+fn api_header(header: &Header) -> ApiHeader {
+    ApiHeader {
+        id: header.id(),
+        parent_block: header.parent_block(),
+        slot: header.slot(),
+        body_root: *header.body_root(),
+        proof_of_leadership: header.leader_proof().clone(),
+    }
+}
+
+impl From<StoredBlock> for ApiBlock {
+    fn from(block: StoredBlock) -> Self {
+        Self {
+            header: api_header(&block.header),
+            uncle_headers: block
+                .uncle_headers
+                .iter()
+                .map(|uncle| ApiSignedHeader {
+                    header: api_header(uncle.header()),
+                    signature: *uncle.signature(),
+                })
+                .collect(),
+            transactions: block.transactions,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub enum Mode {
@@ -78,6 +123,49 @@ pub struct ClaimableVouchers {
     pub reward_amount: Value,
     #[serde(deserialize_with = "u64_from_string_or_number")]
     pub total_claimable: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct LeaderAgedNote {
+    pub id: NoteId,
+    #[serde(deserialize_with = "u64_from_string_or_number")]
+    pub value: Value,
+    pub public_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct LeaderAgedNotes {
+    pub tip: HeaderId,
+    #[serde(deserialize_with = "u64_from_string_or_number")]
+    pub total_value: Value,
+    pub notes: Vec<LeaderAgedNote>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct NetworkInfo {
+    pub n_peers: u64,
+    pub n_connections: u64,
+    pub n_pending_connections: u64,
+    pub n_discovered_peers: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct Account {
+    pub public_key: String,
+    pub title: String,
+    pub roles: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct KeystoreKey {
+    pub key_id: String,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct Accounts {
+    pub accounts: Vec<Account>,
+    pub keystore_keys: Vec<KeystoreKey>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
