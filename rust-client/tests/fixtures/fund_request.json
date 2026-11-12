@@ -1,0 +1,31 @@
+{
+ "tip": null,
+ "tx_builder": {
+  "mantle_tx": {
+   "fork_digest": "5f1d0c9b8a7e6d5c4b3a29180716f5e4d3c2b1a0998877665544332211ffeedd",
+   "ops": [
+    {
+     "opcode": 17,
+     "payload": {
+      "channel_id": "00ff112233445566778899aabbccddeeff00112233445566778899aabbccddee",
+      "inscription": "68656c6c6f",
+      "parent": "0000000000000000000000000000000000000000000000000000000000000000",
+      "signer": "3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63ac048a18b59da29"
+     }
+    }
+   ]
+  },
+  "ledger_inputs": [],
+  "pending_transfer": {
+   "inputs": [],
+   "outputs": []
+  },
+  "channel_multi_sig_proofs": {}
+ },
+ "change_public_key": "41fe8c0a3b1d2e4f5061728394a5b6c7d8e9fa0b1c2d3e4f5061728394a5b60c",
+ "funding_public_keys": [
+  "41fe8c0a3b1d2e4f5061728394a5b6c7d8e9fa0b1c2d3e4f5061728394a5b60c"
+ ],
+ "max_tx_fee": 5000,
+ "priority_fee_percent": 0
+}

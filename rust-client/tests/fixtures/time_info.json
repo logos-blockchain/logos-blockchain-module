@@ -1,0 +1,11 @@
+{
+ "genesis_time": "2026-09-28T12:30:00Z",
+ "current_slot": 689400,
+ "current_epoch": 19,
+ "era_timings": {
+  "0": {
+   "slot_duration_ms": 1000,
+   "slots_per_epoch": 36000
+  }
+ }
+}

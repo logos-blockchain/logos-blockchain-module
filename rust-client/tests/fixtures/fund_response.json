@@ -1,0 +1,38 @@
+{
+ "tip": "c41a7e0b5d3f2a1908e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a39281",
+ "funded_tx": {
+  "fork_digest": "5f1d0c9b8a7e6d5c4b3a29180716f5e4d3c2b1a0998877665544332211ffeedd",
+  "ops": [
+   {
+    "opcode": 17,
+    "payload": {
+     "channel_id": "00ff112233445566778899aabbccddeeff00112233445566778899aabbccddee",
+     "inscription": "68656c6c6f",
+     "parent": "0000000000000000000000000000000000000000000000000000000000000000",
+     "signer": "3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63ac048a18b59da29"
+    }
+   },
+   {
+    "opcode": 0,
+    "payload": {
+     "inputs": [
+      "6e0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d70f"
+     ],
+     "outputs": [
+      {
+       "value": 98765,
+       "pk": "41fe8c0a3b1d2e4f5061728394a5b6c7d8e9fa0b1c2d3e4f5061728394a5b60c"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "transfer_proof": {
+  "ZkSig": {
+   "pi_a": "21b3b6e64dde10c41949c30139844c46d556bbc94794703bb870396d1358dec4",
+   "pi_b": "766866c9e4092606130b0923be06f96955ca161bbb3443cb95d02a7c5a375270a35998f1cd3b78fe6925ce80bcee53d01663d9bbb6d47a39f037cbe11f0c59c0",
+   "pi_c": "1a09520fd6696cef9bc9c9dad5cc1283964261983c9aef664d8d4b40f1a7aac6"
+  }
+ }
+}
