@@ -10,9 +10,9 @@ use serde::de::DeserializeOwned;
 
 use reply::stream_item;
 use types::{
-    id_hex, parse_amount, ApiBlock, BlockInfo, ChannelId, ChannelState, ClaimableVouchers,
-    CryptarchiaInfo, Events, HeaderId, PowClaimableRewards, ProcessedBlockEvent, SignedOps,
-    Slot, StandardMode, TimeInfo, Unverified, TxHash, Value, WalletFundRequestBody, WalletFundResponseBody, WalletNotes,
+    id_hex, parse_amount, Accounts, ApiBlock, BlockInfo, ChannelId, ChannelState, ClaimableVouchers,
+    CryptarchiaInfo, Events, HeaderId, LeaderAgedNotes, NetworkInfo, PowClaimableRewards, ProcessedBlockEvent, SignedOps,
+    Slot, StandardMode, StoredBlock, TimeInfo, Unverified, TxHash, Value, WalletFundRequestBody, WalletFundResponseBody, WalletNotes,
 };
 
 type Reply = Result<serde_json::Value, LogosError>;
@@ -33,12 +33,26 @@ fn string(method: &'static str) -> impl FnOnce(Reply) -> Result<String, ModuleEr
     move |reply| reply::decode::<String>(method, reply)
 }
 
+/// A reply that is text, kept as text even when it happens to parse as JSON
+/// (a numeric chain id, a YAML document that is also a JSON scalar).
+fn text(method: &'static str) -> impl FnOnce(Reply) -> Result<String, ModuleError> + Send + 'static {
+    move |reply| reply::text(method, reply)
+}
+
 fn typed<T: DeserializeOwned>(method: &'static str) -> impl FnOnce(Reply) -> Result<T, ModuleError> + Send + 'static {
     move |reply| reply::decode::<T>(method, reply)
 }
 
 fn typed_opt<T: DeserializeOwned>(method: &'static str) -> impl FnOnce(Reply) -> Result<Option<T>, ModuleError> + Send + 'static {
     move |reply| reply::decode_opt::<T>(method, reply)
+}
+
+fn block_opt(method: &'static str) -> impl FnOnce(Reply) -> Result<Option<ApiBlock>, ModuleError> + Send + 'static {
+    move |reply| Ok(reply::decode_opt::<StoredBlock>(method, reply)?.map(ApiBlock::from))
+}
+
+fn block_list(method: &'static str) -> impl FnOnce(Reply) -> Result<Vec<ApiBlock>, ModuleError> + Send + 'static {
+    move |reply| Ok(reply::decode::<Vec<StoredBlock>>(method, reply)?.into_iter().map(ApiBlock::from).collect())
 }
 
 fn unit(method: &'static str) -> impl FnOnce(Reply) -> Result<(), ModuleError> + Send + 'static {
@@ -108,6 +122,24 @@ impl BlockchainModuleClient {
         self.generate_user_config_async(&args.to_string(), adapt(string("generate_user_config"), callback));
     }
 
+    /// Writes the node's participation settings into the config at `config_path`.
+    /// `external_port` is 65535 at most; 0 means none.
+    pub fn participate_in_network(
+        &self,
+        config_path: &str,
+        output_dir: &str,
+        external_address: &str,
+        external_port: u16,
+    ) -> Result<(), ModuleError> {
+        unit("participate")(self.participate(config_path, output_dir, external_address, u64::from(external_port)))
+    }
+
+    /// The config a node started from `config_path` would run with, as YAML with
+    /// the keystore merged in and the secrets redacted.
+    pub fn effective_config(&self, config_path: &str) -> Result<String, ModuleError> {
+        text("show_config")(self.show_config(config_path))
+    }
+
     pub fn peer_id(&self, config_path: &str) -> Result<String, ModuleError> {
         string("get_peer_id")(self.get_peer_id(config_path))
     }
@@ -118,8 +150,23 @@ impl BlockchainModuleClient {
         self.get_peer_id_async(config_path, adapt(string("get_peer_id"), callback));
     }
 
+    /// `key_type` is "ed25519" or "zk". `key_title` may be empty (auto-generated).
     pub fn generate_wallet_key(&self, keystore_path: &str, key_type: &str, key_title: &str) -> Result<String, ModuleError> {
-        string("generate_key")(self.generate_key(keystore_path, key_type, key_title))
+        text("generate_key")(self.generate_key(keystore_path, key_type, key_title))
+    }
+
+    pub fn add_wallet_key(
+        &self,
+        keystore_path: &str,
+        key_type: &str,
+        key_hex: &str,
+        key_title: &str,
+    ) -> Result<(), ModuleError> {
+        unit("add_key")(self.add_key(keystore_path, key_type, key_hex, key_title))
+    }
+
+    pub fn remove_wallet_key(&self, keystore_path: &str, key_title: &str) -> Result<(), ModuleError> {
+        unit("remove_key")(self.remove_key(keystore_path, key_title))
     }
 
     pub fn balance(&self, address_hex: &str) -> Result<Value, ModuleError> {
@@ -180,6 +227,13 @@ impl BlockchainModuleClient {
             &amount.to_string(),
             &tip,
         ))
+    }
+
+    /// Wallet notes old enough to take part in the leadership lottery. `tip` of
+    /// `None` queries at the current tip.
+    pub fn leader_aged_notes(&self, tip: Option<HeaderId>) -> Result<LeaderAgedNotes, ModuleError> {
+        let tip = tip_hex("wallet_get_leader_aged_notes", tip)?;
+        typed::<LeaderAgedNotes>("wallet_get_leader_aged_notes")(self.wallet_get_leader_aged_notes(&tip))
     }
 
     pub fn claim_leader_reward(&self) -> Result<TxHash, ModuleError> {
@@ -284,7 +338,7 @@ impl BlockchainModuleClient {
 
     pub fn block(&self, id: HeaderId) -> Result<Option<ApiBlock>, ModuleError> {
         let hex = id_hex("get_block", &id)?;
-        typed_opt::<ApiBlock>("get_block")(self.get_block(&hex))
+        block_opt("get_block")(self.get_block(&hex))
     }
     pub fn block_async<F>(&self, id: HeaderId, callback: F)
     where
@@ -294,17 +348,17 @@ impl BlockchainModuleClient {
             Ok(h) => h,
             Err(e) => return callback(Err(e)),
         };
-        self.get_block_async(&hex, adapt(typed_opt::<ApiBlock>("get_block"), callback));
+        self.get_block_async(&hex, adapt(block_opt("get_block"), callback));
     }
 
     pub fn blocks(&self, from: Slot, to: Slot) -> Result<Vec<ApiBlock>, ModuleError> {
-        typed::<Vec<ApiBlock>>("get_blocks")(self.get_blocks(from.into_inner(), to.into_inner()))
+        block_list("get_blocks")(self.get_blocks(from.into_inner(), to.into_inner()))
     }
     pub fn blocks_async<F>(&self, from: Slot, to: Slot, callback: F)
     where
         F: FnOnce(Result<Vec<ApiBlock>, ModuleError>) + Send + 'static,
     {
-        self.get_blocks_async(from.into_inner(), to.into_inner(), adapt(typed::<Vec<ApiBlock>>("get_blocks"), callback));
+        self.get_blocks_async(from.into_inner(), to.into_inner(), adapt(block_list("get_blocks"), callback));
     }
 
     pub fn block_events(&self, id: HeaderId) -> Result<Option<Events>, ModuleError> {
@@ -346,6 +400,60 @@ impl BlockchainModuleClient {
         reply::unwrap("blend_info", self.blend_info())
     }
 
+    /// Declares this node as a blend core node and returns the declaration id.
+    /// `service_note_id_hex` may be empty: the node then picks the note.
+    pub fn join_blend_as_core_node(&self, locator: &str, service_note_id_hex: &str) -> Result<String, ModuleError> {
+        text("blend_join_as_core_node")(self.blend_join_as_core_node(locator, service_note_id_hex))
+    }
+
+    pub fn chain_id(&self) -> Result<String, ModuleError> {
+        text("get_chain_id")(self.get_chain_id())
+    }
+
+    pub fn network_info(&self) -> Result<NetworkInfo, ModuleError> {
+        typed::<NetworkInfo>("get_network_info")(self.get_network_info())
+    }
+
+    /// The running node's metrics as an OpenMetrics text document. Empty if the
+    /// node is not running or the metrics cannot be read.
+    pub fn open_metrics_text(&self) -> Result<String, ModuleError> {
+        self.collect_open_metrics_text()
+            .map_err(|source| ModuleError::Transport { method: "collectOpenMetricsText", source })
+    }
+
+    /// Call after a stream ended to receive `newBlock` events again.
+    pub fn resubscribe_to_new_blocks(&self) -> Result<(), ModuleError> {
+        unit("subscribe_to_new_blocks")(self.subscribe_to_new_blocks())
+    }
+    /// Call after a stream ended to receive `processedBlock` events again.
+    pub fn resubscribe_to_processed_blocks(&self) -> Result<(), ModuleError> {
+        unit("subscribe_to_processed_blocks")(self.subscribe_to_processed_blocks())
+    }
+    /// Call after a stream ended to receive `libBlock` events again.
+    pub fn resubscribe_to_lib_blocks(&self) -> Result<(), ModuleError> {
+        unit("subscribe_to_lib_blocks")(self.subscribe_to_lib_blocks())
+    }
+
+    /// Accounts the config at `config_path` names and the keys its keystore
+    /// holds. An empty path reads the running node's config.
+    pub fn accounts(&self, config_path: &str) -> Result<Accounts, ModuleError> {
+        typed::<Accounts>("read_accounts")(self.read_accounts(config_path))
+    }
+
+    pub fn mining_status(&self) -> Result<serde_json::Value, ModuleError> {
+        reply::unwrap("pow_status", self.pow_status())
+    }
+    /// Writes the pow section into the config at `config_path`; the node reads
+    /// it on the next start.
+    pub fn configure_mining(&self, config_path: &str, config: &serde_json::Value) -> Result<(), ModuleError> {
+        unit("pow_configure")(self.pow_configure(config_path, &config.to_string()))
+    }
+    /// The pow section of the config at `config_path`, in the shape
+    /// [`Self::configure_mining`] takes.
+    pub fn mining_config(&self, config_path: &str) -> Result<serde_json::Value, ModuleError> {
+        reply::unwrap("read_pow_config", self.read_pow_config(config_path))
+    }
+
     pub fn start_mining(&self) -> Result<(), ModuleError> {
         unit("pow_start_mining")(self.pow_start_mining())
     }
@@ -381,5 +489,40 @@ impl BlockchainModuleClient {
         let payload = Self::decode_new_block(ev)
             .ok_or_else(|| ModuleError::decode("newBlock", "malformed event payload"))?;
         stream_item("newBlock", &payload.block_json)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const STORED_BLOCK: &str = include_str!("../tests/fixtures/get_block.json");
+
+    fn reply_with(json: &str) -> Reply {
+        Ok(serde_json::json!({ "success": true, "value": json, "error": null }))
+    }
+
+    #[test]
+    fn stored_block_gets_its_header_id() {
+        let block = block_opt("get_block")(reply_with(STORED_BLOCK)).unwrap().expect("a block");
+        assert_eq!(block.header.slot, Slot::from(689_412));
+        assert_eq!(block.transactions.len(), 1);
+        // The id is the header's hash: stable, and not the parent's.
+        let again = block_opt("get_block")(reply_with(STORED_BLOCK)).unwrap().expect("a block");
+        assert_eq!(block.header.id, again.header.id);
+        assert_ne!(block.header.id, block.header.parent_block);
+    }
+
+    #[test]
+    fn stored_blocks_decode_as_a_list() {
+        let blocks = block_list("get_blocks")(reply_with(&format!("[{STORED_BLOCK},{STORED_BLOCK}]"))).unwrap();
+        assert_eq!(blocks.len(), 2);
+        assert!(block_list("get_blocks")(reply_with("[]")).unwrap().is_empty());
+    }
+
+    #[test]
+    fn missing_block_is_none() {
+        let reply = Ok(serde_json::json!({ "success": false, "value": null, "error": "No block found for header id [1, 2]" }));
+        assert!(block_opt("get_block")(reply).unwrap().is_none());
     }
 }

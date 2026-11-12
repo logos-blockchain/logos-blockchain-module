@@ -1,0 +1,58 @@
+{
+ "block": {
+  "header": {
+   "id": "c41a7e0b5d3f2a1908e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a39281",
+   "parent_block": "21b3b6e64dde10c41949c30139844c46d556bbc94794703bb870396d1358dec4",
+   "slot": 689412,
+   "body_root": "1a09520fd6696cef9bc9c9dad5cc1283964261983c9aef664d8d4b40f1a7aac6",
+   "proof_of_leadership": {
+    "proof": "bbb88bea9127dc82cb879e7e3766b36b9a724d7ae57699f2bf997dc3add836a409bfba579d0fe2a109c0af88050ffeae752be223c0a783ebec6ce768cd7cd443a464fc5099bea6b9086fea654dcb8306fbae601c8465498dc76a3d9160e6416c12285dc441471704c6032aa54fa15c77a676004c1d25b11257bdda1cad38d161",
+    "entropy_contribution": "ac426b92c1ddd0f98717ab61925aed75f7676526738992275b67682c9aafa90b",
+    "leader_key": "a741dfbcffd8c8c76843a96e4d509d61c5da0001d434a1c0746e7438401ff7df",
+    "voucher_cm": "5e0d1c2b3a49586776859463a2b1c0dfeefd0c1b2a39485766758493a2b1c00f"
+   }
+  },
+  "uncle_headers": [],
+  "transactions": [
+   {
+    "mantle_tx": {
+     "hash": "9f3c1e0a7b2d4c6e8f00112233445566778899aabbccddeeff0011223344aa55",
+     "fork_digest": "5f1d0c9b8a7e6d5c4b3a29180716f5e4d3c2b1a0998877665544332211ffeedd",
+     "ops": [
+      {
+       "opcode": 0,
+       "payload": {
+        "inputs": [
+         "3a5f0e1d2c3b4a59687766554433221100ffeeddccbbaa99887766554433220b"
+        ],
+        "outputs": [
+         {
+          "value": 1000,
+          "pk": "6d1e2f3a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e50a"
+         },
+         {
+          "value": 4249,
+          "pk": "41fe8c0a3b1d2e4f5061728394a5b6c7d8e9fa0b1c2d3e4f5061728394a5b60c"
+         }
+        ]
+       }
+      }
+     ]
+    },
+    "ops_proofs": [
+     {
+      "ZkSig": {
+       "pi_a": "21b3b6e64dde10c41949c30139844c46d556bbc94794703bb870396d1358dec4",
+       "pi_b": "766866c9e4092606130b0923be06f96955ca161bbb3443cb95d02a7c5a375270a35998f1cd3b78fe6925ce80bcee53d01663d9bbb6d47a39f037cbe11f0c59c0",
+       "pi_c": "1a09520fd6696cef9bc9c9dad5cc1283964261983c9aef664d8d4b40f1a7aac6"
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "tip": "c41a7e0b5d3f2a1908e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a39281",
+ "tip_slot": 689412,
+ "lib": "0b7d2e9f4a1c3e5d7f9b0a2c4e6d8f1a3b5c7d9e0f2a4b6c8d0e1f3a5b7c9d0e",
+ "lib_slot": 685801
+}

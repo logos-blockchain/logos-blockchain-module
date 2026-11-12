@@ -1,0 +1,15 @@
+{
+ "accredited_keys": [
+  "3b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63ac048a18b59da29",
+  "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+ ],
+ "configuration_threshold": 1,
+ "tip_message": "9a0c1d2e3f405162738495a6b7c8d9eafb0c1d2e3f405162738495a6b7c8d9ea",
+ "config_tip_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+ "tip_slot": 689300,
+ "tip_sequencer": 0,
+ "tip_sequencer_starting_slot": 689000,
+ "posting_timeframe": 0,
+ "posting_timeout": 0,
+ "transfer_threshold": 1
+}
