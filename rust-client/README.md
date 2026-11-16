@@ -6,7 +6,7 @@ by `logos-lidl-gen` and committed, so consumers need cargo only.
 ```toml
 [dependencies]
 logos-blockchain-client = { git = "https://github.com/logos-blockchain/logos-blockchain-module", rev = "<sha>" }
-logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "a55fdac1a202ff2a4cf9d562a263ab41db17d99f" }  # same as the client's pin
+logos-rust-sdk = { git = "https://github.com/logos-co/logos-rust-sdk", rev = "b572e8172ca512b41c102d555f00258b859629c0" }  # same as the client's pin
 ```
 
 ```rust
@@ -55,3 +55,29 @@ nix run .#generate
 ```
 
 Rewrites `blockchain_module.lidl`, `src/generated.rs` and `example-module/rust-lib/src/provider_gen.rs`.
+Run it whenever `src/logos_blockchain_module.h` or the builder changes, and do not edit those
+files by hand: CI regenerates them and fails if the committed copies differ.
+
+`src/lib.rs` and `src/types.rs` are written by hand on top of the generated layer. A method
+added to the module shows up in `generated.rs` only; give it a typed wrapper there.
+
+## Pins
+
+```bash
+rust-client/check-pins.sh
+```
+
+The Cargo manifests must pin the node and `logos-rust-sdk` at the revisions `flake.lock` has:
+the node's types are what the module's replies are decoded into, and `logos-rust-sdk` is what
+the generated code is written against. CI runs the check. After bumping the node or the
+builder in `flake.nix`, bump the manifests, refresh the three `Cargo.lock` files and regenerate.
+
+## Tests
+
+```bash
+cargo test                      # in rust-client
+```
+
+`tests/module_shapes.rs` decodes sample module replies (`tests/fixtures/`) into the node's
+types. When a node bump changes a reply's shape, these fail; update the fixture to what the
+module now sends and fix the typed layer.

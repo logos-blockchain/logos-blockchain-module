@@ -107,6 +107,24 @@ pub fn decode<T: DeserializeOwned>(
     serde_json::from_value(value).map_err(|e| ModuleError::decode(method, e))
 }
 
+/// The reply's value as text. `unwrap_value` parses string values that are
+/// valid JSON, so a text reply such as `"7"` comes back as a number; this
+/// gives the text back unchanged in either case.
+pub fn text(
+    method: &'static str,
+    reply: Result<serde_json::Value, LogosError>,
+) -> Result<String, ModuleError> {
+    let reply = reply.map_err(|source| ModuleError::Transport { method, source })?;
+    let succeeded = reply.get("success").and_then(serde_json::Value::as_bool) == Some(true);
+    if let (true, Some(serde_json::Value::String(s))) = (succeeded, reply.get("value")) {
+        return Ok(s.clone());
+    }
+    Ok(match unwrap_value(method, reply)? {
+        serde_json::Value::String(s) => s,
+        other => other.to_string(),
+    })
+}
+
 pub fn decode_opt<T: DeserializeOwned>(
     method: &'static str,
     reply: Result<serde_json::Value, LogosError>,
