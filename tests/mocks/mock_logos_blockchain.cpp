@@ -126,6 +126,15 @@ StringResult get_peer_id(const char* config_path) {
     return result;
 }
 
+StringResult show_config(const char* config_path) {
+    LOGOS_CMOCK_RECORD("show_config");
+    StringResult result;
+    const char* yaml = LOGOS_CMOCK_RETURN_STRING("show_config");
+    result.value = yaml ? strdup(yaml) : nullptr;
+    result.error = make_status(LOGOS_CMOCK_RETURN(int, "show_config_error"));
+    return result;
+}
+
 OperationStatus subscribe_to_new_blocks(LogosBlockchainNode* node, BlockCallback callback) {
     LOGOS_CMOCK_RECORD("subscribe_to_new_blocks");
     g_lastNewBlockCallback = callback;
@@ -343,7 +352,7 @@ BlendHashResult blend_join_as_core_node(
     const char* locator,
     const uint8_t* locked_note_id)
 {
-    LOGOS_CMOCK_RECORD("blend_join_as_core_node");
+    LOGOS_CMOCK_RECORD(locked_note_id ? "blend_join_as_core_node" : "blend_join_as_core_node_without_note");
     BlendHashResult result;
     memset(result.value, 0xCD, sizeof(Hash));
     result.error = make_status(LOGOS_CMOCK_RETURN(int, "blend_join_as_core_node_error"));

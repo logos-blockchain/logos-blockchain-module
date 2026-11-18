@@ -798,7 +798,7 @@ LOGOS_TEST(blend_join_rejects_empty_locator) {
     delete module;
 }
 
-LOGOS_TEST(blend_join_rejects_invalid_locked_note_id) {
+LOGOS_TEST(blend_join_rejects_invalid_service_note_id) {
     auto t = LogosTestContext("blockchain_module");
     TempDir tmpDir;
     auto* module = createStartedModule(t, tmpDir);
@@ -806,7 +806,7 @@ LOGOS_TEST(blend_join_rejects_invalid_locked_note_id) {
 
     StdLogosResult result = module->blend_join_as_core_node("locator1", "short");
     LOGOS_ASSERT_FALSE(result.success);
-    LOGOS_ASSERT_TRUE(contains(result.error, "locked_note_id"));
+    LOGOS_ASSERT_TRUE(contains(result.error, "service_note_id"));
     delete module;
 }
 
@@ -1548,6 +1548,21 @@ LOGOS_TEST(blend_join_as_core_node_returns_declaration_id) {
     LOGOS_ASSERT_EQ(static_cast<int>(declarationId.length()), 64);
     LOGOS_ASSERT_TRUE(declarationId.substr(0, 2) == "cd");
     LOGOS_ASSERT(t.cFunctionCalled("blend_join_as_core_node"));
+    delete module;
+}
+
+LOGOS_TEST(blend_join_as_core_node_lets_the_node_pick_the_note_when_none_is_given) {
+    auto t = LogosTestContext("blockchain_module");
+    TempDir tmpDir;
+    auto* module = createStartedModule(t, tmpDir);
+    LOGOS_ASSERT_TRUE(module != nullptr);
+
+    t.mockCFunction("blend_join_as_core_node_error").returns(0);
+
+    StdLogosResult result = module->blend_join_as_core_node("locator1", "");
+    LOGOS_ASSERT_TRUE(result.success);
+    LOGOS_ASSERT(t.cFunctionCalled("blend_join_as_core_node_without_note"));
+    LOGOS_ASSERT_FALSE(t.cFunctionCalled("blend_join_as_core_node"));
     delete module;
 }
 
@@ -2546,6 +2561,35 @@ LOGOS_TEST(get_peer_id_returns_error_on_ffi_failure) {
     t.mockCFunction("get_peer_id_error").returns(1);
 
     StdLogosResult result = module.get_peer_id("/tmp/config.yaml");
+    LOGOS_ASSERT_FALSE(result.success);
+}
+
+// ============================================================================
+// Effective config (show_config)
+// ============================================================================
+
+LOGOS_TEST(show_config_returns_yaml_on_success) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+
+    const std::string yaml = "network:\n  backend:\n    swarm:\n      node_key: <secret>\n";
+    t.mockCFunction("show_config").returns(yaml.c_str());
+    t.mockCFunction("show_config_error").returns(0);
+
+    StdLogosResult result = module.show_config("/tmp/config.yaml");
+    LOGOS_ASSERT_TRUE(result.success);
+    LOGOS_ASSERT_EQ(result.value.get<std::string>(), yaml);
+    LOGOS_ASSERT(t.cFunctionCalled("show_config"));
+    LOGOS_ASSERT(t.cFunctionCalled("free_cstring"));
+}
+
+LOGOS_TEST(show_config_returns_error_on_ffi_failure) {
+    auto t = LogosTestContext("blockchain_module");
+    LogosBlockchainModule module;
+
+    t.mockCFunction("show_config_error").returns(1);
+
+    StdLogosResult result = module.show_config("/tmp/config.yaml");
     LOGOS_ASSERT_FALSE(result.success);
 }
 
