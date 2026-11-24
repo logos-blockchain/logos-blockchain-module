@@ -69,6 +69,9 @@ public:
         const std::string& output_dir,
         const std::string& external_address
     );
+    // The config a node started from config_path would run with, as YAML with
+    // the keystore merged in and the secrets redacted. Needs no running node.
+    [[nodiscard]] static StdLogosResult show_config(const std::string& config_path);
 
     // Keystore
     // The keystore stands alone since node 0.3.3: the config no longer lists its
@@ -173,9 +176,11 @@ public:
     [[nodiscard]] StdLogosResult get_channel_state(const std::string& channel_id_hex) const;
 
     // Blend
+    // optional_service_note_id_hex may be empty: the node then picks the smallest unlocked
+    // note held by its blend ZK key that meets the minimum stake.
     [[nodiscard]] StdLogosResult blend_join_as_core_node(
         const std::string& locator,
-        const std::string& locked_note_id_hex
+        const std::string& optional_service_note_id_hex
     ) const;
     [[nodiscard]] StdLogosResult blend_info() const;
 

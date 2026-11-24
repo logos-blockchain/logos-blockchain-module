@@ -239,7 +239,7 @@ public:
     std::string fundTx(const std::string& request, Error& err);
     Bytes32 submitSigned(const std::string& signedTx, Error& err);
     Bytes32 leaderClaim(Error& err);
-    Bytes32 blendJoin(const std::string& locator, const Bytes32& noteId, Error& err);
+    Bytes32 blendJoin(const std::string& locator, std::optional<Bytes32> requestedNoteId, Error& err);
 
     void powSetMining(bool on);
     void powSetAutoClaim(bool on);
@@ -248,6 +248,7 @@ public:
     Bytes32 powClaim(const Bytes32* address, Error& err);
 
 private:
+    bool selectServiceNote(Bytes32& out, Error& err);
     Node() = default;
 
     // ---- chain ----
