@@ -740,18 +740,26 @@ void LogosBlockchainModule::run_start(const std::string& config_path, const std:
     } else if (!value) {
         error = "Could not subscribe to block events: the node is not running.";
     } else {
-        node = value;
+        // The subscriptions wait for the chain service to recover its state. The node is published only after them, so
+        // that callers get "The node is starting." until then, not a call that hangs.
         s_instance = this;
-        StdLogosResult rc = subscribe_to_new_blocks();
+        StdLogosResult rc = stream::subscribe(is_new_blocks_subscribed, [value] {
+            return ::subscribe_to_new_blocks(value, on_new_block_callback);
+        });
         if (rc.success) {
-            rc = subscribe_to_processed_blocks();
+            rc = stream::subscribe(is_processed_blocks_subscribed, [value] {
+                return ::subscribe_to_processed_blocks(value, on_processed_block_callback);
+            });
         }
         if (rc.success) {
-            rc = subscribe_to_lib_blocks();
+            rc = stream::subscribe(is_lib_blocks_subscribed, [value] {
+                return ::subscribe_to_lib_blocks(value, on_lib_block_callback);
+            });
         }
         if (!rc.success) {
             error = rc.error;
         }
+        node = value;
     }
     if (!error.empty()) {
         fprintf(stderr, "Could not start the node: %s\n", error.c_str());
@@ -808,7 +816,6 @@ StdLogosResult LogosBlockchainModule::stop() {
         fprintf(stderr, "Could not execute the operation: The node is not running.\n");
         return result::err(not_running_message());
     }
-    // The node is set before its streams are subscribed, and it can't be shut down during a call on it.
     if (start_thread.joinable()) {
         start_thread.join();
     }
@@ -859,7 +866,7 @@ StdLogosResult LogosBlockchainModule::purge_state() const {
     {
         const std::lock_guard lock(start_mutex);
         if (is_starting) {
-            return result::err("The node is starting. Stop it before purging state.");
+            return result::err("The node is starting.");
         }
     }
 
