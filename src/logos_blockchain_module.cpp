@@ -7,6 +7,7 @@
 #include <boost/algorithm/string/trim.hpp>
 #include <cctype>
 #include <charconv>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
@@ -577,11 +578,13 @@ void LogosBlockchainModule::on_lib_block_callback(const char* event) {
     s_instance->libBlock(std::string(event));
 }
 
-LogosBlockchainModule::LogosBlockchainModule() {
-    node = nullptr;
-}
+LogosBlockchainModule::LogosBlockchainModule() = default;
 
 LogosBlockchainModule::~LogosBlockchainModule() {
+    // A start in progress can't be cancelled, and its thread uses this object.
+    if (start_thread.joinable()) {
+        start_thread.join();
+    }
     s_instance = nullptr;
     if (node) {
         (void)stop();
@@ -672,10 +675,23 @@ StdLogosResult LogosBlockchainModule::generate_user_config(const std::string& js
     return result::ok(resolved_output);
 }
 
+// How long start() waits for the node before it reports "starting". Kept well under the 20 s RPC timeout of logosctl.
+static constexpr std::chrono::seconds START_WAIT{10};
+
 StdLogosResult LogosBlockchainModule::start(const std::string& config_path, const std::string& deployment) {
     if (node) {
         fprintf(stderr, "Could not execute the operation: The node is already running.\n");
         return result::err("The node is already running.");
+    }
+    {
+        const std::lock_guard lock(start_mutex);
+        if (is_starting) {
+            return result::err("The node is starting.");
+        }
+    }
+    // The thread of an earlier start that has finished.
+    if (start_thread.joinable()) {
+        start_thread.join();
     }
 
     std::string effective_config_path = config_path;
@@ -694,36 +710,76 @@ StdLogosResult LogosBlockchainModule::start(const std::string& config_path, cons
     effective_config_path = localPathFromFileUrl(effective_config_path);
     const std::string deployment_path = localPathFromFileUrl(deployment);
 
-    const char* config_path_ptr = effective_config_path.empty() ? nullptr : effective_config_path.c_str();
+    {
+        const std::lock_guard lock(start_mutex);
+        is_starting = true;
+        start_error.clear();
+    }
+    node_config_path = effective_config_path;
+    start_thread = std::thread([this, effective_config_path, deployment_path] {
+        run_start(effective_config_path, deployment_path);
+    });
+
+    std::unique_lock lock(start_mutex);
+    if (!start_finished.wait_for(lock, START_WAIT, [this] { return !is_starting; })) {
+        return result::ok(std::string("starting"));
+    }
+    if (!start_error.empty()) {
+        return result::err(start_error);
+    }
+    return result::ok();
+}
+
+void LogosBlockchainModule::run_start(const std::string& config_path, const std::string& deployment_path) {
+    const char* config_path_ptr = config_path.empty() ? nullptr : config_path.c_str();
     const char* deployment_ptr = deployment_path.empty() ? nullptr : deployment_path.c_str();
 
-    auto [value, error] = start_lb_node(config_path_ptr, deployment_ptr);
-    if (!is_ok(&error)) {
-        return result::err(operation_status::take_message(error));
+    std::string error;
+    auto [value, status] = start_lb_node(config_path_ptr, deployment_ptr);
+    if (!is_ok(&status)) {
+        error = operation_status::take_message(status);
+    } else if (!value) {
+        error = "Could not subscribe to block events: the node is not running.";
+    } else {
+        node = value;
+        s_instance = this;
+        StdLogosResult rc = subscribe_to_new_blocks();
+        if (rc.success) {
+            rc = subscribe_to_processed_blocks();
+        }
+        if (rc.success) {
+            rc = subscribe_to_lib_blocks();
+        }
+        if (!rc.success) {
+            error = rc.error;
+        }
+    }
+    if (!error.empty()) {
+        fprintf(stderr, "Could not start the node: %s\n", error.c_str());
     }
 
-    node = value;
-    if (node) {
-        node_config_path = effective_config_path;
+    {
+        const std::lock_guard lock(start_mutex);
+        is_starting = false;
+        start_error = std::move(error);
     }
+    start_finished.notify_all();
+}
 
-    if (!node) {
-        return result::err("Could not subscribe to block events: the node is not running.");
+std::string LogosBlockchainModule::not_running_message() const {
+    const std::lock_guard lock(start_mutex);
+    if (is_starting) {
+        return "The node is starting.";
     }
-
-    s_instance = this;
-    if (StdLogosResult rc = subscribe_to_new_blocks(); !rc.success) {
-        return rc;
+    if (!start_error.empty()) {
+        return "The node failed to start: " + start_error;
     }
-    if (StdLogosResult rc = subscribe_to_processed_blocks(); !rc.success) {
-        return rc;
-    }
-    return subscribe_to_lib_blocks();
+    return "The node is not running.";
 }
 
 StdLogosResult LogosBlockchainModule::subscribe_to_new_blocks() {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
     return stream::subscribe(is_new_blocks_subscribed, [this] {
         return ::subscribe_to_new_blocks(node, on_new_block_callback);
@@ -732,7 +788,7 @@ StdLogosResult LogosBlockchainModule::subscribe_to_new_blocks() {
 
 StdLogosResult LogosBlockchainModule::subscribe_to_processed_blocks() {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
     return stream::subscribe(is_processed_blocks_subscribed, [this] {
         return ::subscribe_to_processed_blocks(node, on_processed_block_callback);
@@ -741,7 +797,7 @@ StdLogosResult LogosBlockchainModule::subscribe_to_processed_blocks() {
 
 StdLogosResult LogosBlockchainModule::subscribe_to_lib_blocks() {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
     return stream::subscribe(is_lib_blocks_subscribed, [this] {
         return ::subscribe_to_lib_blocks(node, on_lib_block_callback);
@@ -751,7 +807,11 @@ StdLogosResult LogosBlockchainModule::subscribe_to_lib_blocks() {
 StdLogosResult LogosBlockchainModule::stop() {
     if (!node) {
         fprintf(stderr, "Could not execute the operation: The node is not running.\n");
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
+    }
+    // The node is set before its streams are subscribed, and it can't be shut down during a call on it.
+    if (start_thread.joinable()) {
+        start_thread.join();
     }
 
     s_instance = nullptr;
@@ -766,6 +826,10 @@ StdLogosResult LogosBlockchainModule::stop() {
     is_new_blocks_subscribed = false;
     is_processed_blocks_subscribed = false;
     is_lib_blocks_subscribed = false;
+    {
+        const std::lock_guard lock(start_mutex);
+        start_error.clear();
+    }
     return result::ok();
 }
 
@@ -792,6 +856,12 @@ StdLogosResult LogosBlockchainModule::purge_state() const {
     if (node) {
         fprintf(stderr, "Could not purge state: the node is running.\n");
         return result::err("The node is running. Stop it before purging state.");
+    }
+    {
+        const std::lock_guard lock(start_mutex);
+        if (is_starting) {
+            return result::err("The node is starting. Stop it before purging state.");
+        }
     }
 
     const std::string& persistence_path = instancePersistencePath();
@@ -1191,7 +1261,7 @@ StdLogosResult LogosBlockchainModule::get_peer_id(const std::string& config_path
 StdLogosResult LogosBlockchainModule::wallet_get_balance(const std::string& address_hex) const {
     fprintf(stderr, "wallet_get_balance: address_hex=%s\n", address_hex.c_str());
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     const std::vector<uint8_t> bytes = parse_address_hex(address_hex);
@@ -1215,7 +1285,7 @@ StdLogosResult LogosBlockchainModule::wallet_transfer_funds(
     const std::string& optional_tip_hex
 ) const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     std::string amount_trimmed = amount;
@@ -1277,7 +1347,7 @@ StdLogosResult LogosBlockchainModule::wallet_transfer_funds(
 StdLogosResult LogosBlockchainModule::wallet_get_known_addresses() const {
     if (!node) {
         fprintf(stderr, "Could not execute the operation: The node is not running.\n");
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
     auto [value, error] = get_known_addresses(node);
     if (!is_ok(&error)) {
@@ -1309,7 +1379,7 @@ StdLogosResult LogosBlockchainModule::wallet_get_notes(
     const std::string& optional_tip_hex
 ) const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     const std::vector<uint8_t> address_bytes = parse_address_hex(wallet_address_hex);
@@ -1354,7 +1424,7 @@ StdLogosResult LogosBlockchainModule::wallet_get_notes(
 
 StdLogosResult LogosBlockchainModule::wallet_get_leader_aged_notes(const std::string& optional_tip_hex) const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     std::vector<uint8_t> tip_bytes;
@@ -1396,7 +1466,7 @@ StdLogosResult LogosBlockchainModule::wallet_get_leader_aged_notes(const std::st
 
 StdLogosResult LogosBlockchainModule::leader_claim() const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     auto [value, error] = ::leader_claim(node);
@@ -1417,7 +1487,7 @@ StdLogosResult LogosBlockchainModule::channel_deposit(
     const std::string& optional_tip_hex
 ) const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     std::string amount_trimmed = amount;
@@ -1481,7 +1551,7 @@ StdLogosResult LogosBlockchainModule::channel_deposit_with_notes(
     const std::string& optional_tip_hex
 ) const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     const std::vector<uint8_t> channel_bytes = parse_address_hex(channel_id_hex);
@@ -1569,7 +1639,7 @@ StdLogosResult LogosBlockchainModule::channel_deposit_with_notes(
 
 StdLogosResult LogosBlockchainModule::get_channel_state(const std::string& channel_id_hex) const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     const std::vector<uint8_t> bytes = parse_address_hex(channel_id_hex);
@@ -1594,7 +1664,7 @@ StdLogosResult LogosBlockchainModule::get_channel_state(const std::string& chann
 
 StdLogosResult LogosBlockchainModule::wallet_get_claimable_vouchers() const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     auto [value, error] = get_claimable_vouchers(node, nullptr);
@@ -1628,7 +1698,7 @@ StdLogosResult LogosBlockchainModule::wallet_get_claimable_vouchers() const {
 
 StdLogosResult LogosBlockchainModule::wallet_fund_tx(const std::string& request_json) const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     auto [value, error] = ::wallet_fund_tx(node, request_json.c_str());
@@ -1648,7 +1718,7 @@ StdLogosResult LogosBlockchainModule::wallet_fund_tx(const std::string& request_
 
 StdLogosResult LogosBlockchainModule::submit_signed_transaction(const std::string& signed_tx_json) const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     auto [value, error] = ::submit_signed_transaction(node, signed_tx_json.c_str());
@@ -1665,7 +1735,7 @@ StdLogosResult LogosBlockchainModule::blend_join_as_core_node(
     const std::string& optional_service_note_id_hex
 ) const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     if (locator.empty()) {
@@ -1693,7 +1763,7 @@ StdLogosResult LogosBlockchainModule::blend_join_as_core_node(
 
 StdLogosResult LogosBlockchainModule::blend_info() const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     auto [value, error] = ::blend_info(node);
@@ -1713,7 +1783,7 @@ StdLogosResult LogosBlockchainModule::blend_info() const {
 
 StdLogosResult LogosBlockchainModule::get_chain_id() const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     auto [value, error] = ::get_chain_id(node);
@@ -1755,7 +1825,7 @@ std::string LogosBlockchainModule::collectOpenMetricsText() const {
 
 StdLogosResult LogosBlockchainModule::get_network_info() const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     auto [value, error] = ::get_network_info(node);
@@ -1775,7 +1845,7 @@ StdLogosResult LogosBlockchainModule::get_network_info() const {
 
 StdLogosResult LogosBlockchainModule::get_block(const std::string& header_id_hex) const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     const std::vector<uint8_t> bytes = parse_address_hex(header_id_hex);
@@ -1798,7 +1868,7 @@ StdLogosResult LogosBlockchainModule::get_block(const std::string& header_id_hex
 
 StdLogosResult LogosBlockchainModule::get_blocks(const uint64_t from_slot, const uint64_t to_slot) const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     auto [value, error] = ::get_blocks(node, from_slot, to_slot);
@@ -1816,7 +1886,7 @@ StdLogosResult LogosBlockchainModule::get_blocks(const uint64_t from_slot, const
 
 StdLogosResult LogosBlockchainModule::get_transaction(const std::string& tx_hash_hex) const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     const std::vector<uint8_t> bytes = parse_address_hex(tx_hash_hex);
@@ -1841,7 +1911,7 @@ StdLogosResult LogosBlockchainModule::get_transaction(const std::string& tx_hash
 
 StdLogosResult LogosBlockchainModule::get_cryptarchia_info() const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     auto [value, error] = ::get_cryptarchia_info(node);
@@ -1876,7 +1946,7 @@ StdLogosResult LogosBlockchainModule::get_cryptarchia_info() const {
 
 StdLogosResult LogosBlockchainModule::get_block_events(const std::string& header_id_hex) const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     const std::vector<uint8_t> bytes = parse_address_hex(header_id_hex);
@@ -1903,7 +1973,7 @@ StdLogosResult LogosBlockchainModule::get_block_events(const std::string& header
 
 StdLogosResult LogosBlockchainModule::get_time_info() const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     auto [value, error] = ::get_time_info(node);
@@ -1943,7 +2013,7 @@ StdLogosResult LogosBlockchainModule::get_time_info() const {
 
 StdLogosResult LogosBlockchainModule::pow_start_mining() const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     OperationStatus status = ::pow_start_mining(node);
@@ -1952,7 +2022,7 @@ StdLogosResult LogosBlockchainModule::pow_start_mining() const {
 
 StdLogosResult LogosBlockchainModule::pow_stop_mining() const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     OperationStatus status = ::pow_stop_mining(node);
@@ -1961,7 +2031,7 @@ StdLogosResult LogosBlockchainModule::pow_stop_mining() const {
 
 StdLogosResult LogosBlockchainModule::pow_start_auto_claim() const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     OperationStatus status = ::pow_start_auto_claim(node);
@@ -1970,7 +2040,7 @@ StdLogosResult LogosBlockchainModule::pow_start_auto_claim() const {
 
 StdLogosResult LogosBlockchainModule::pow_stop_auto_claim() const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     OperationStatus status = ::pow_stop_auto_claim(node);
@@ -1979,7 +2049,7 @@ StdLogosResult LogosBlockchainModule::pow_stop_auto_claim() const {
 
 StdLogosResult LogosBlockchainModule::pow_claim(const std::string& claim_address_hex) const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     // A null claim address pays out to whichever auto-claim target is furthest below its threshold.
@@ -2003,7 +2073,7 @@ StdLogosResult LogosBlockchainModule::pow_claim(const std::string& claim_address
 
 StdLogosResult LogosBlockchainModule::pow_claimable_rewards() const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     auto [value, error] = ::pow_claimable_rewards(node);
@@ -2029,7 +2099,7 @@ StdLogosResult LogosBlockchainModule::pow_claimable_rewards() const {
 
 StdLogosResult LogosBlockchainModule::pow_status() const {
     if (!node) {
-        return result::err("The node is not running.");
+        return result::err(not_running_message());
     }
 
     auto [value, error] = ::pow_status(node);
