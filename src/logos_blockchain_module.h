@@ -299,7 +299,8 @@ private:
     // Written by the start thread, read by callers.
     std::atomic<LogosBlockchainNode*> node{nullptr};
 
-    // start_lb_node blocks until the node's services are ready, so start() runs it on this thread.
+    // Starting the node and subscribing to its streams blocks until its services are ready, so start() does both on
+    // this thread.
     std::thread start_thread;
     mutable std::mutex start_mutex;
     std::condition_variable start_finished;
