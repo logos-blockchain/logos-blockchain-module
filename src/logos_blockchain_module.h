@@ -1,7 +1,10 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <logos_module_context.h>
@@ -23,6 +26,10 @@ public:
     // ---- Node ----
 
     // Lifecycle
+    // The node is only up once its services have recovered their state, which takes longer than a caller's RPC timeout
+    // on a long stored chain. start() waits a few seconds for that. If the node is up by then, the result is final. If
+    // not, start() succeeds with the value "starting" and the node keeps starting in the background: until it is up,
+    // calls that need a running node fail with "The node is starting.", and if it fails to come up, with the reason.
     [[nodiscard]] StdLogosResult start(const std::string& config_path, const std::string& deployment);
     [[nodiscard]] StdLogosResult stop();
 
@@ -289,7 +296,22 @@ logos_events:
     // clang-format on
 
 private:
-    LogosBlockchainNode* node = nullptr;
+    // Written by the start thread, read by callers.
+    std::atomic<LogosBlockchainNode*> node{nullptr};
+
+    // Starting the node and subscribing to its streams blocks until its services are ready, so start() does both on
+    // this thread.
+    std::thread start_thread;
+    mutable std::mutex start_mutex;
+    std::condition_variable start_finished;
+    // Guarded by start_mutex.
+    bool is_starting = false;
+    // Why the last start failed; empty if it didn't. Guarded by start_mutex.
+    std::string start_error;
+
+    void run_start(const std::string& config_path, const std::string& deployment_path);
+    // Why there is no running node to serve a call: stopped, still starting, or failed to start.
+    [[nodiscard]] std::string not_running_message() const;
     // The config the running node was started with, as start() resolved it; empty while stopped.
     std::string node_config_path;
 
