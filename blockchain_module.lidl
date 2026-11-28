@@ -1,5 +1,5 @@
 module blockchain_module {
-  version "0.0.999"
+  version "0.4.0-rc.5"
   description "Logos blockchain node for logos-core"
   category "blockchain"
   depends []
