@@ -16,6 +16,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 
-lb-core = { package = "logos-blockchain-core", git = "https://github.com/logos-blockchain/logos-blockchain.git", rev = "adf89336764fd2b375e9d79a4a597f405c7e0748", default-features = false }
-lb-common-http-client = { package = "logos-blockchain-common-http-client", git = "https://github.com/logos-blockchain/logos-blockchain.git", rev = "adf89336764fd2b375e9d79a4a597f405c7e0748", default-features = false }
-lb-http-api-common = { package = "logos-blockchain-http-api-common", git = "https://github.com/logos-blockchain/logos-blockchain.git", rev = "adf89336764fd2b375e9d79a4a597f405c7e0748", default-features = false }
+lb-core = { package = "logos-blockchain-core", git = "https://github.com/logos-blockchain/logos-blockchain.git", rev = "2c5e0b6adba6436b09a3b514f307b81918a84231", default-features = false }
+lb-common-http-client = { package = "logos-blockchain-common-http-client", git = "https://github.com/logos-blockchain/logos-blockchain.git", rev = "2c5e0b6adba6436b09a3b514f307b81918a84231", default-features = false }
+lb-http-api-common = { package = "logos-blockchain-http-api-common", git = "https://github.com/logos-blockchain/logos-blockchain.git", rev = "2c5e0b6adba6436b09a3b514f307b81918a84231", default-features = false }
